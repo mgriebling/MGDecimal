@@ -31,7 +31,7 @@ import Foundation
  THE POSSIBILITY OF SUCH DAMAGE.
  ******************************************************************************/
 
-extension BID32 {
+extension Decimal32 {
     
     /*********************************************************************/
     /////////////////////////////////////////
@@ -53,57 +53,68 @@ extension BID32 {
     static let DECIMAL_EXPONENT_BIAS_32 = 101
     static let MAX_FORMAT_DIGITS_32     =   7
     static let BID32_SIG_MAX            = 9999999
-    // #define BID64_SIG_MAX                     0x002386F26FC0ffffull
+
     ////////////////////////////////////////
     // Constant Definitions
     ///////////////////////////////////////
-    static let SPECIAL_ENCODING_MASK64 = UInt64(0x6000000000000000)
-    static let INFINITY_MASK64         = UInt64(0x7800000000000000)
-    static let SINFINITY_MASK64        = UInt64(0xf800000000000000)
-    static let SSNAN_MASK64            = UInt64(0xfc00000000000000)
-    static let NAN_MASK64              = UInt64(0x7c00000000000000)
-    static let SNAN_MASK64             = UInt64(0x7e00000000000000)
-    static let QUIET_MASK64            = UInt64(0xfdffffffffffffff)
-    static let LARGE_COEFF_MASK64      = UInt64(0x0007ffffffffffff)
-    static let LARGE_COEFF_HIGH_BIT64  = UInt64(0x0020000000000000)
-    static let SMALL_COEFF_MASK64      = UInt64(0x001fffffffffffff)
-    static let EXPONENT_MASK64         = 0x3ff
-    static let EXPONENT_SHIFT_LARGE64  = 51
-    static let EXPONENT_SHIFT_SMALL64  = 53
-    static let LARGEST_BID64           = UInt64(0x77fb86f26fc0ffff)
-    static let SMALLEST_BID64          = UInt64(0xf7fb86f26fc0ffff)
-    static let SMALL_COEFF_MASK128     = UInt64(0x0001ffffffffffff)
-    static let LARGE_COEFF_MASK128     = UInt64(0x00007fffffffffff)
-    static let EXPONENT_MASK128        = 0x3fff
-    static let LARGEST_BID128_HIGH     = UInt64(0x5fffed09bead87c0)
-    static let LARGEST_BID128_LOW      = UInt64(0x378d8e63ffffffff)
-    static let SPECIAL_ENCODING_MASK32 = UInt32(0x60000000)
-    static let SINFINITY_MASK32        = UInt32(0xf8000000)
-    static let INFINITY_MASK32         = UInt32(0x78000000)
-    static let LARGE_COEFF_MASK32      = UInt32(0x007fffff)
-    static let LARGE_COEFF_HIGH_BIT32  = UInt32(0x00800000)
-    static let SMALL_COEFF_MASK32      = UInt32(0x001fffff)
-    static let EXPONENT_MASK32         = UInt32(0xff)
-    static let LARGEST_BID32           = UInt32(0x77f8967f)
-    static let NAN_MASK32              = UInt32(0x7c000000)
-    static let SNAN_MASK32             = UInt32(0x7e000000)
-    static let SSNAN_MASK32            = UInt32(0xfc000000)
-    static let QUIET_MASK32            = UInt32(0xfdffffff)
-    static let MASK_BINARY_EXPONENT    = UInt64(0x7ff0000000000000)
-    static let BINARY_EXPONENT_BIAS    = 0x3ff
-    static let UPPER_EXPON_LIMIT       = 51
+    static let SPECIAL_ENCODING_MASK64  = UInt64(0x6000000000000000)
+    static let INFINITY_MASK64          = UInt64(0x7800000000000000)
+    static let SINFINITY_MASK64         = UInt64(0xf800000000000000)
+    static let SSNAN_MASK64             = UInt64(0xfc00000000000000)
+    static let NAN_MASK64               = UInt64(0x7c00000000000000)
+    static let SNAN_MASK64              = UInt64(0x7e00000000000000)
+    static let QUIET_MASK64             = UInt64(0xfdffffffffffffff)
+    static let LARGE_COEFF_MASK64       = UInt64(0x0007ffffffffffff)
+    static let LARGE_COEFF_HIGH_BIT64   = UInt64(0x0020000000000000)
+    static let SMALL_COEFF_MASK64       = UInt64(0x001fffffffffffff)
+    static let EXPONENT_MASK64          = 0x3ff
+    static let EXPONENT_SHIFT_LARGE64   = 51
+    static let EXPONENT_SHIFT_SMALL64   = 53
+    static let LARGEST_BID64            = UInt64(0x77fb86f26fc0ffff)
+    static let SMALLEST_BID64           = UInt64(0xf7fb86f26fc0ffff)
+    static let SMALL_COEFF_MASK128      = UInt64(0x0001ffffffffffff)
+    static let LARGE_COEFF_MASK128      = UInt64(0x00007fffffffffff)
+    static let EXPONENT_MASK128         = 0x3fff
+    static let LARGEST_BID128_HIGH      = UInt64(0x5fffed09bead87c0)
+    static let LARGEST_BID128_LOW       = UInt64(0x378d8e63ffffffff)
+    static let SPECIAL_ENCODING_MASK32  = UInt32(0x6000_0000)
+    static let MASK_STEERING_BITS32     = SPECIAL_ENCODING_MASK32
+    static let SINFINITY_MASK32         = UInt32(0xf800_0000)
+    static let INFINITY_MASK32          = UInt32(0x7800_0000)
+    static let MASK_INF32               = INFINITY_MASK32
+    static let LARGE_COEFF_MASK32       = UInt32(0x007f_ffff)
+    static let MASK_BINARY_SIG1_32      = LARGE_COEFF_MASK32
+    static let LARGE_COEFF_HIGH_BIT32   = UInt32(0x0080_0000)
+    static let MASK_BINARY_OR2_32       = LARGE_COEFF_HIGH_BIT32
+    static let SMALL_COEFF_MASK32       = UInt32(0x001f_ffff)
+    static let MASK_BINARY_SIG2_32      = SMALL_COEFF_MASK32
+    static let EXPONENT_MASK32          = UInt32(0xff)
+    static let LARGEST_BID32            = UInt32(0x77f8_967f)
+    static let MASK_BINARY_EXPONENT1_32 = UInt32(0x7f80_0000)
+    static let MASK_BINARY_EXPONENT2_32 = UInt32(0x1fe0_0000)
+    static let NAN_MASK32               = UInt32(0x7c00_0000)
+    static let MASK_NAN32               = NAN_MASK32
+    static let SNAN_MASK32              = UInt32(0x7e00_0000)
+    static let MASK_SNAN32              = SNAN_MASK32
+    static let SSNAN_MASK32             = UInt32(0xfc00_0000)
+    static let QUIET_MASK32             = UInt32(0xfdff_ffff)
+    static let MASK_BINARY_EXPONENT     = UInt64(0x7ff0000000000000)
+    static let SIGN_MASK32              = UInt32(0x8000_0000)
+    static let MASK_SIGN32              = SIGN_MASK32
+    static let BINARY_EXPONENT_BIAS     = 0x3ff
+    static let UPPER_EXPON_LIMIT        = 51
     
-    static func int64_to_BID32 (_ value:Int64, _ rnd_mode:Rounding, _ state: inout Status) -> BID32 {
+    static func int64_to_BID32 (_ value:Int64, _ rnd_mode:Rounding, _ state: inout Status) -> Decimal32 {
         // Dealing with 64-bit integer
-        let x_sign32 : UInt32 = (value < 0 ? 0x80000000 : 0x00000000)
+        let x_sign32 : UInt32 = (value < 0 ? SIGN_MASK32 : 0)
         let C = UInt64(value.magnitude) // if the integer is negative, use the absolute value
         
         var res: UInt32
-        if C <= UInt64(BID32.BID32_SIG_MAX) { // |C| <= 10^7-1 and the result is exact
-            if C < UInt64(0x00800000) { // C < 2^23
-                res = x_sign32 | 0x32800000 | UInt32(C & 0x007fffff)
+        if C <= UInt64(Decimal32.BID32_SIG_MAX) { // |C| <= 10^7-1 and the result is exact
+            if C < UInt64(LARGE_COEFF_HIGH_BIT32) { // C < 2^23
+                res = x_sign32 | 0x32800000 | UInt32(C) & LARGE_COEFF_MASK32
             } else { // C >= 2^23
-                res = x_sign32 | 0x6ca00000 | UInt32(C & 0x001fffff)
+                res = x_sign32 | 0x6ca00000 | UInt32(C) & SMALL_COEFF_MASK32
             }
         } else { // |C| >= 10^7 and the result may be inexact
             // the smallest |C| is 10^7 which has 8 decimal digits
@@ -187,34 +198,20 @@ extension BID32 {
                     // exact, the result is already correct
                 }
             }
-            if res < 0x0080_0000 { // res < 2^23
+            if res < LARGE_COEFF_HIGH_BIT32 { // res < 2^23
                 res = x_sign32 | ((UInt32(ind) + 101) << 23) | res
             } else { // res >= 2^23
-                res = x_sign32 | 0x6000_0000 | ((UInt32(ind) + 101) << 21) | (res & 0x001f_ffff)
+                res = x_sign32 | 0x6000_0000 | ((UInt32(ind) + 101) << 21) | (res & SMALL_COEFF_MASK32)
             }
         }
-        return BID32(raw: res)
+        return Decimal32(raw: res)
     }
     
-    static func double_to_bid32 (_ x:Double, _ rnd_mode:Rounding, _ state: inout Status) -> BID32 {
-        //  BID_UINT128 c;
-        //  BID_UINT64 c_prov;
-        //  BID_UINT128 m_min;
-        //  BID_UINT256 r;
-        //  BID_UINT384 z;
-        //
-        //  int e, s, t, e_out;
-        //
-        //#if DECIMAL_CALL_BY_REFERENCE
-        //#if !DECIMAL_GLOBAL_ROUNDING
-        //  _IDEC_round rnd_mode = *prnd_mode;
-        //#endif
-        //#endif
-        
+    static func double_to_bid32 (_ x:Double, _ rnd_mode:Rounding, _ state: inout Status) -> Decimal32 {
         // Unpack the input
         var s = 0, e = 0, t = 0
-        var c : (UInt64, UInt64) = (0,0)
-        unpack_binary64 (x, &s, &e, &c.1, &t, &state)
+        var c = UInt128(w: [0,0])
+        unpack_binary64 (x, &s, &e, &c.w[0], &t, &state)
         
         // Now -1126<=e<=971 (971 for max normal, -1074 for min normal, -1126 for min denormal)
         
@@ -223,15 +220,15 @@ extension BID32 {
         // five 64-bit words. So we shift 113-53=60 places
         //
         // Remember to compensate for the fact that exponents are integer for quad
-        c.0 = 0
-        sll128_short (&c.0, &c.1, 60);
+        c.w[1] = 0
+        c = sll128_short(c.w[1], c.w[0], 60)
         t += (113 - 53);
         e -= (113 - 53); // Now e belongs [-1186;911].
         
         // Check for "trivial" overflow, when 2^e * 2^112 > 10^emax * 10^d.
         // We actually check if e >= ceil((emax + d) * log_2(10) - 112)
         // This could be intercepted later, but it's convenient to keep tables smaller
-        if (e >= 211) {
+        if e >= 211 {
             // __set_status_flags(pfpsf, BID_OVERFLOW_INEXACT_EXCEPTION);
             state.formUnion([.overflow, .inexact])
             return return_bid32_ovf (s)
@@ -254,26 +251,23 @@ extension BID32 {
         //     if a > 48 we can immediately forget this, since 5^49 > 10^34.
         //     Otherwise we determine whether we're in range by a table based on
         //     a, and if so get the multiplier also from a table based on a.
-        
-        if (e <= 0) {
-            var cint:(UInt64,UInt64)
+        if e <= 0 {
+            var cint:UInt128
             let a = -(e + t)
             cint = c
-            if (a <= 0) {
-                srl128(&cint.0, &cint.1, -e)
-                if ((cint.0 == 0) && (cint.1 < 10000000)) {
-                    return return_bid32 (s, 101, Int(cint.1))
+            if a <= 0 {
+                cint = srl128(cint.w[1], cint.w[0], -e)
+                if ((cint.w[1] == 0) && (cint.w[0] < 10000000)) {
+                    return return_bid32(s, 101, Int(cint.w[0]))
                 }
-            } else if (a <= 48) {
+            } else if a <= 48 {
                 var pow5 = bid_coefflimits_bid32[a]
-                srl128(&cint.0, &cint.1, t)
-                if (le128 (cint.0, cint.1, pow5[1], pow5[0])) {
-                    var cc:(UInt64,UInt64)
-                    cc.0 = cint.0
-                    cc.1 = cint.1
+                cint = srl128(cint.w[1], cint.w[0], t)
+                if le128(cint.w[1], cint.w[0], pow5.w[1], pow5.w[0]) {
+                    var cc = cint
                     pow5 = bid_power_five[a]
-                    __mul_128x128_low (&cc, cc, (pow5[0], pow5[1]))
-                    return return_bid32 (s, 101 - a, Int(cc.1))
+                    __mul_128x128_low(&cc, cc, pow5)
+                    return return_bid32(s, 101 - a, Int(cc.w[0]))
                 }
             }
         }
@@ -284,28 +278,27 @@ extension BID32 {
         //
         // This is important not only to keep the tables small but to maintain the
         // testing of the round/sticky words as a correct rounding method
-        if (e <= -450) {
+        if e <= -450 {
             e = -450
         }
         
         // Now look up our exponent e, and the breakpoint between e and e+1
         let m_min = bid_breakpoints_bid32[e+450]
-        let e_out = bid_exponents_bid32[e+450]
+        var e_out = bid_exponents_bid32[e+450]
         
         // Choose exponent and reciprocal multiplier based on breakpoint
-        var r:[UInt64]
-        if le128(c.0, c.1, m_min[0], m_min[1]) {
+        var r:UInt256
+        if le128(c.w[1], c.w[0], m_min.w[1], m_min.w[0]) {
             r = bid_multipliers1_bid32[e+450]
         } else {
             r = bid_multipliers2_bid32[e+450]
-            e_out = e_out + 1;
+            e_out += 1
         }
         
         // Do the reciprocal multiplication
-        var z:UInt384
-        var r:UInt256
-        __mul_128x256_to_384 (z, c, r)
-        var c_prov = z.w[5];
+        var z:UInt384=UInt384()
+        __mul_128x256_to_384(&z, c, r)
+        var c_prov = z.w[5]
         
         // Test inexactness and underflow (when testing tininess before rounding)
         if ((z.w[4] != 0) || (z.w[3] != 0)) {
@@ -320,13 +313,13 @@ extension BID32 {
         // Round using round-sticky words
         // If we spill over into the next decade, correct
         // Flag underflow where it may be needed even for |result| = SNN
-        let ind = roundboundIndex(rnd_mode, s == 1, c_prov)
-        if (lt128(bid_roundbound_128[ind][1], bid_roundbound_128[ind][0], z.w[4], z.w[3])) {
-            c_prov = c_prov + 1;
-            if (c_prov == 10000000) {
-                c_prov = 1000000;
-                e_out = e_out + 1;
-            } else if ((c_prov == 1000000) && (e_out == 0)) {
+        let ind = roundboundIndex(rnd_mode, s == 1, Int(c_prov))
+        if (lt128(bid_roundbound_128[ind].w[1], bid_roundbound_128[ind].w[0], z.w[4], z.w[3])) {
+            c_prov += 1
+            if c_prov == 10_000_000 {
+                c_prov = 1_000_000
+                e_out += 1
+            } else if c_prov == 1_000_000 && e_out == 0 {
                 let ind = roundboundIndex(rnd_mode, false, 0) >> 2
                 if ((((ind & 3) == 0) && (z.w[4] <= 17524406870024074035)) ||
                     ((ind + (s & 1) == 2) && (z.w[4] <= 16602069666338596454))) {
@@ -337,7 +330,7 @@ extension BID32 {
         }
         
         // Check for overflow
-        if (e_out > 90 + 101) {
+        if e_out > 90 + 101 {
             // __set_status_flags(pfpsf, BID_OVERFLOW_INEXACT_EXCEPTION);
             state.formUnion([.overflow, .inexact])
             return return_bid32_ovf(s)
@@ -346,17 +339,16 @@ extension BID32 {
         // Set the inexact flag as appropriate and check underflow
         // It's no doubt superfluous to check inexactness, but anyway...
         
-        if ((z.w[4] != 0) || (z.w[3] != 0)) {
+        if (z.w[4] != 0) || (z.w[3] != 0) {
             // __set_status_flags(pfpsf,BID_INEXACT_EXCEPTION);
             state.insert(.inexact)
             if (c_prov < 1000000) {
                 state.insert(.underflow)
- //               __set_status_flags(pfpsf,BID_UNDERFLOW_EXCEPTION);
             }
         }
         
         // Package up the result
-        return_bid32 (s, e_out, c_prov);
+        return return_bid32 (s, e_out, Int(c_prov))
     }
 
     
@@ -385,16 +377,16 @@ extension BID32 {
         // kx ~= 10^(-x), kx = bid_Kx64[ind] * 2^(-Ex), 0 <= ind <= 16
         // P128 = (C + 1/2 * 10^x) * kx * 2^Ex = (C + 1/2 * 10^x) * Kx
         // the approximation kx of 10^(-x) was rounded up to 64 bits
-        var P128: UInt128 = (0,0)
+        var P128: UInt128 = UInt128(w:[0,0])
         __mul_64x64_to_128MACH (&P128, C, bid_Kx64[ind]);
         // calculate C* = floor (P128) and f*
         // Cstar = P128 >> Ex
         // fstar = low Ex bits of P128
         let shift = bid_Ex64m64[ind];    // in [3, 56]
-        var Cstar = P128.0 >> shift;
-        var fstar: UInt128 = (0,0)
-        fstar.0 = P128.0 & bid_mask64[ind];
-        fstar.1 = P128.1
+        var Cstar = P128.w[1] >> shift;
+        var fstar: UInt128 = UInt128(w:[0,0])
+        fstar.w[1] = P128.w[1] & bid_mask64[ind];
+        fstar.w[0] = P128.w[0]
         // the top Ex bits of 10^(-x) are T* = bid_ten2mxtrunc64[ind], e.g.
         // if x=1, T*=bid_ten2mxtrunc64[0]=0xcccccccccccccccc
         // if (0 < f* < 10^(-x)) then the result is a midpoint
@@ -412,18 +404,18 @@ extension BID32 {
         //   the result is exact
         // else // if (f* - 1/2 > T*) then
         //   the result is inexact
-        if (fstar.0 > bid_half64[ind] || (fstar.0 == bid_half64[ind] && fstar.1 != 0)) {
+        if (fstar.w[1] > bid_half64[ind] || (fstar.w[1] == bid_half64[ind] && fstar.w[0] != 0)) {
             // f* > 1/2 and the result may be exact
             // Calculate f* - 1/2
-            let tmp64 = fstar.0 - bid_half64[ind];
-            if (tmp64 != 0 || fstar.1 > bid_ten2mxtrunc64[ind]) {    // f* - 1/2 > 10^(-x)
+            let tmp64 = fstar.w[1] - bid_half64[ind];
+            if (tmp64 != 0 || fstar.w[0] > bid_ten2mxtrunc64[ind]) {    // f* - 1/2 > 10^(-x)
                 ptr_is_inexact_lt_midpoint = true
             }    // else the result is exact
         } else {    // the result is inexact; f2* <= 1/2
             ptr_is_inexact_gt_midpoint = true
         }
         // check for midpoints (could do this before determining inexactness)
-        if (fstar.0 == 0 && fstar.1 <= bid_ten2mxtrunc64[ind]) {
+        if (fstar.w[1] == 0 && fstar.w[0] <= bid_ten2mxtrunc64[ind]) {
             // the result is a midpoint
             if (Cstar & 0x01 != 0) {    // Cstar is odd; MP in [EVEN, ODD]
                 // if floor(C*) is odd C = floor(C*) - 1; the result may be 0
@@ -489,9 +481,86 @@ extension BID32 {
     }
     
     //
+    //   No overflow/underflow checking
+    //   or checking for coefficients equal to 10^16 (after rounding)
+    //
+    static func very_fast_get_BID64 (_ sgn:UInt64, _ expon:Int, _ coeff:UInt64) -> UInt64 {
+        var mask = UInt64(1)
+        mask <<= EXPONENT_SHIFT_SMALL64
+        
+        // check whether coefficient fits in 10*5+3 bits
+        var r:UInt64
+        if (coeff < mask) {
+            r = UInt64(expon)
+            r <<= EXPONENT_SHIFT_SMALL64;
+            r |= (coeff | sgn);
+            return r
+        }
+        // special format
+        r = UInt64(expon)
+        r <<= EXPONENT_SHIFT_LARGE64;
+        r |= (sgn | SPECIAL_ENCODING_MASK64);
+        // add coeff, without leading bits
+        mask = (mask >> 2) - 1
+        r |= coeff & mask
+        return r
+    }
+    
+    //
+    //   no overflow/underflow checks
+    //
+    static func very_fast_get_BID32 (_ sgn:UInt32, _ expon:Int, _ coeff:UInt32) -> UInt32  {
+        var mask = UInt32(1) << 23
+        
+        // check whether coefficient fits in 10*2+3 bits
+        var r:UInt32
+        if (coeff < mask) {
+            r = UInt32(expon)
+            r <<= 23;
+            r |= (coeff | sgn);
+            return r;
+        }
+        // special format
+        r = UInt32(expon)
+        r <<= 21;
+        r |= (sgn | SPECIAL_ENCODING_MASK32)
+        // add coeff, without leading bits
+        mask = (1 << 21) - 1
+        r |= coeff & mask
+        return r
+    }
+    
+    static func fast_get_BID32 (_ sgn:UInt32, _ expon:Int, _ coeff:UInt32) -> UInt32  {
+        var mask = UInt32(1) << 23;
+        var expon = expon
+        var coeff = coeff
+        if (coeff > 9999999) {
+            expon+=1
+            coeff = 1000000
+        }
+        // check whether coefficient fits in 10*2+3 bits
+        var r:UInt32
+        if (coeff < mask) {
+            r = UInt32(expon)
+            r <<= 23;
+            r |= (coeff | sgn);
+            return r;
+        }
+        // special format
+        r = UInt32(expon)
+        r <<= 21;
+        r |= (sgn | SPECIAL_ENCODING_MASK32);
+        // add coeff, without leading bits
+        mask = (1 << 21) - 1;
+        r |= coeff & mask
+        
+        return r;
+    }
+    
+    //
     //   General pack macro for BID32
     //
-    static func get_BID32 (_ sgn: UInt32, _ expon: Int, _ coeff:UInt32, _ rmode: Rounding, _ fpsc: inout Status) -> BID32 {
+    static func get_BID32 (_ sgn: UInt32, _ expon: Int, _ coeff:UInt32, _ rmode: Rounding, _ fpsc: inout Status) -> Decimal32 {
         var expon = expon
         var coeff = coeff
         var rmode = rmode
@@ -507,14 +576,14 @@ extension BID32 {
                 if (expon + MAX_FORMAT_DIGITS_32 < 0) {
                     fpsc.formUnion([.underflow, .inexact])
                     if (rmode == .down && sgn != 0) {
-                        return BID32(raw: 0x80000001)
+                        return Decimal32(raw: 0x80000001)
                     }
                     if (rmode == .up && sgn == 0) {
-                        return BID32(raw: 1)
+                        return Decimal32(raw: 1)
                     }
                 }
                 // result is 0
-                return BID32(raw: sgn)
+                return Decimal32(raw: sgn)
             }
             
             // swap up & down round modes when negative
@@ -525,14 +594,6 @@ extension BID32 {
             
             // determine the rounding table index
             let roundIndex = roundboundIndex(rmode, false, 0) >> 2
-//            switch rmode {
-//                case .up: roundIndex = 2
-//                case .halfEven: roundIndex = 0
-//                case .down: roundIndex = 1
-//                case .halfUp: roundIndex = 4
-//                case .halfDown: roundIndex = 3
-//                default: roundIndex = 0
-//            }
             
             // get digits to be shifted out
             let extra_digits = -expon;
@@ -599,7 +660,7 @@ extension BID32 {
                     //                  __set_status_flags (fpsc, BID_UNDERFLOW_EXCEPTION | status);
                 }
                 
-                return BID32(raw: sgn | UInt32(_C64))
+                return Decimal32(raw: sgn | UInt32(_C64))
             }
             
             if coeff == 0 { if expon > DECIMAL_MAX_EXPON_32 { expon = DECIMAL_MAX_EXPON_32 } }
@@ -625,7 +686,7 @@ extension BID32 {
                         }
                     default: break
                 }
-                return BID32(raw: r)
+                return Decimal32(raw: r)
             }
         }
         
@@ -636,7 +697,7 @@ extension BID32 {
             var r = UInt32(expon)
             r <<= 23
             r |= (coeff | sgn)
-            return BID32(raw: r)
+            return Decimal32(raw: r)
         }
         // special format
         
@@ -647,13 +708,13 @@ extension BID32 {
         mask = (UInt32(1) << 21) - 1
         r |= (coeff & mask);
         
-        return BID32(raw: r)
+        return Decimal32(raw: r)
     }
     
     //
     //   General pack macro for BID32
     //
-    static func get_BID32_UF (_ sgn:UInt32, _ expon:Int, _ coeff:UInt64, _ R: Int, _ rmode:Rounding, _ fpsc: inout Status) -> BID32 {
+    static func get_BID32_UF (_ sgn:UInt32, _ expon:Int, _ coeff:UInt64, _ R: Int, _ rmode:Rounding, _ fpsc: inout Status) -> Decimal32 {
         var expon = expon
         var coeff = coeff
         var rmode = rmode
@@ -669,13 +730,13 @@ extension BID32 {
                 if (expon + MAX_FORMAT_DIGITS_32 < 0) {
                     fpsc.formUnion([.underflow, .inexact])
                     if (rmode == .halfDown && sgn != 0) {
-                        return BID32(raw: 0x80000001)
+                        return Decimal32(raw: 0x80000001)
                     }
                     if (rmode == .halfUp && sgn == 0) {
-                        return BID32(raw: 1)
+                        return Decimal32(raw: 1)
                     }
                     // result is 0
-                    return BID32(raw: sgn)
+                    return Decimal32(raw: sgn)
                 }
                 
                 // swap up & down round modes when negative
@@ -686,14 +747,6 @@ extension BID32 {
                 
                 // determine the rounding table index
                 let roundIndex = roundboundIndex(rmode, false, 0) >> 2
-//                switch rmode {
-//                    case .up: roundIndex = 2
-//                    case .halfEven: roundIndex = 0
-//                    case .down: roundIndex = 1
-//                    case .halfUp: roundIndex = 4
-//                    case .halfDown: roundIndex = 3
-//                    default: roundIndex = 0
-//                }
                 
                 // 10*coeff
                 coeff = (coeff << 3) + (coeff << 1)
@@ -765,7 +818,7 @@ extension BID32 {
                     }
                 }
                 
-                return BID32(raw: sgn | UInt32(_C64))
+                return Decimal32(raw: sgn | UInt32(_C64))
             }
             
             while (coeff < 1000000 && expon > DECIMAL_MAX_EXPON_32) {
@@ -791,7 +844,7 @@ extension BID32 {
                         }
                     default: break
                 }
-                return BID32(raw: r)
+                return Decimal32(raw: r)
             }
         }
         
@@ -803,7 +856,7 @@ extension BID32 {
             r = UInt32(expon)
             r <<= 23;
             r |= UInt32(coeff) | sgn
-            return BID32(raw: r)
+            return Decimal32(raw: r)
         }
         // special format
         r = UInt32(expon)
@@ -813,14 +866,172 @@ extension BID32 {
         mask = (UInt32(1) << 21) - 1
         r |= (UInt32(coeff) & mask)
         
-        return BID32(raw: r)
+        return Decimal32(raw: r)
+    }
+    
+    /*****************************************************************************
+     *  BID32_to_int64_int
+     ****************************************************************************/
+    static func bid32_to_int (_ x: UInt32, _ rmode:Rounding, _ pfpsc: inout Status) -> Int {
+        var res: Int = 0
+        
+        // check for NaN or Infinity
+        if ((x & MASK_NAN32) == MASK_NAN32 || (x & MASK_INF32) == MASK_INF32) {
+            // set invalid flag
+            pfpsc.insert(.invalidOperation)
+            // return Integer Indefinite
+            return Int.max
+        }
+        // unpack x
+        let x_sign = x & MASK_SIGN32; // 0 for positive, MASK_SIGN32 for negative
+        var x_exp, C1 : UInt32
+        // if steering bits are 11 (condition will be 0), then exponent is G[0:w+1] =>
+        if ((x & MASK_STEERING_BITS32) == MASK_STEERING_BITS32) {
+            x_exp = (x & MASK_BINARY_EXPONENT2_32) >> 21; // biased
+            C1 = (x & MASK_BINARY_SIG2_32) | MASK_BINARY_OR2_32;
+            if (C1 > 9999999) { // non-canonical
+                x_exp = 0;
+                C1 = 0;
+            }
+        } else {
+            x_exp = (x & MASK_BINARY_EXPONENT1_32) >> 23; // biased
+            C1 = x & MASK_BINARY_SIG1_32;
+        }
+        
+        // check for zeros (possibly from non-canonical values)
+        if (C1 == 0x0) {
+            // x is 0
+            return 0x00000000
+        }
+        // x is not special and is not zero
+        
+        // q = nr. of decimal digits in x (1 <= q <= 7)
+        //  determine first the nr. of bits in x
+        let tmp1 = Float(C1) // exact conversion
+        let x_nr_bits = Int(1 + ((tmp1.bitPattern >> 23) & 0xff) - 0x7f)
+        var q = Int(bid_nr_digits[x_nr_bits - 1].digits)
+        if q == 0 {
+            q = Int(bid_nr_digits[x_nr_bits - 1].digits1)
+            if C1 >= bid_nr_digits[x_nr_bits - 1].threshold_lo {
+                q+=1
+            }
+        }
+        let exp = Int(x_exp) - 101 // unbiased exponent
+        
+        if ((q + exp) > 19) { // x >= 10^19 ~= 2^63.11... (cannot fit in BID_SINT64)
+            // set invalid flag
+            pfpsc.insert(.invalidOperation)
+            // return Integer Indefinite
+            return Int.max
+        } else if ((q + exp) == 19) { // x = c(0)c(1)...c(q-1)00...0 (19 dec. digits)
+            // in this case 2^63.11... ~= 10^19 <= x < 10^20 ~= 2^66.43...
+            // so x rounded to an integer may or may not fit in a signed 64-bit int
+            // the cases that do not fit are identified here; the ones that fit
+            // fall through and will be handled with other cases further,
+            // under '1 <= q + exp <= 19'
+            var C = UInt128()
+            if ((x_sign) != 0) { // if n < 0 and q + exp = 19
+                // if n <= -2^63 - 1 then n is too large
+                // <=> c(0)c(1)...c(q-1)00...0[19 dec. digits] >= 2^63+1
+                // <=> 0.c(0)c(1)...c(q-1) * 10^20 >= 0x5000000000000000a, 1<=q<=7
+                // <=> C * 10^(20-q) >= 0x5000000000000000a, 1<=q<=7
+                // 1 <= q <= 7 => 13 <= 20-q <= 19 => 10^(20-q) is 64-bit, and so is C1
+                __mul_64x64_to_128MACH (&C, UInt64(C1), bid_ten2k64[20 - q]);
+                // Note: C1 * 10^(11-q) has 19 or 20 digits; 0x5000000000000000a, has 20
+                if (C.w[1] > 0x05 || (C.w[1] == 0x05 && C.w[0] >= 0x0a)) {
+                    // set invalid flag
+                    pfpsc.insert(.invalidOperation)
+                    // return Integer Indefinite
+                    return Int.max
+                }
+                // else cases that can be rounded to a 64-bit int fall through
+                // to '1 <= q + exp <= 19'
+            } else { // if n > 0 and q + exp = 19
+                // if n >= 2^63 then n is too large
+                // <=> c(0)c(1)...c(q-1)00...0[19 dec. digits] >= 2^63
+                // <=> if 0.c(0)c(1)...c(q-1) * 10^20 >= 0x50000000000000000, 1<=q<=7
+                // <=> if C * 10^(20-q) >= 0x50000000000000000, 1<=q<=7
+                C.w[1] = 0x0000000000000005
+                C.w[0] = 0x0000000000000000
+                // 1 <= q <= 7 => 13 <= 20-q <= 19 => 10^(20-q) is 64-bit, and so is C1
+                __mul_64x64_to_128MACH (&C, UInt64(C1), bid_ten2k64[20 - q]);
+                if (C.w[1] >= 0x05) {
+                    // actually C.w[1] == 0x05ull && C.w[0] >= 0x0000000000000000ull) {
+                    // set invalid flag
+                    pfpsc.insert(.invalidOperation)
+                    // return Integer Indefinite
+                    return Int.max
+                }
+                // else cases that can be rounded to a 64-bit int fall through
+                // to '1 <= q + exp <= 19'
+            }    // end else if n > 0 and q + exp = 19
+        }    // end else if ((q + exp) == 19)
+        
+        // n is not too large to be converted to int64: -2^63-1 < n < 2^63
+        // Note: some of the cases tested for above fall through to this point
+        if ((q + exp) <= 0) { // n = +/-0.0...c(0)c(1)...c(q-1)
+            // return 0
+            return 0x0000000000000000
+        } else { // if (1 <= q + exp <= 19, 1 <= q <= 7, -6 <= exp <= 18)
+            // -2^63-1 < x <= -1 or 1 <= x < 2^63 so x can be rounded
+            // to nearest to a 64-bit signed integer
+            if (exp < 0) { // 2 <= q <= 7, -6 <= exp <= -1, 1 <= q + exp <= 19
+                let ind = -exp; // 1 <= ind <= 6; ind is a synonym for 'x'
+                // chop off ind digits from the lower part of C1
+                // C1 fits in 64 bits
+                // calculate C* and f*
+                // C* is actually floor(C*) in this case
+                // C* and f* need shifting and masking, as shown by
+                // bid_shiftright128[] and bid_maskhigh128[]
+                // 1 <= x <= 6
+                // kx = 10^(-x) = bid_ten2mk64[ind - 1]
+                // C* = C1 * 10^(-x)
+                // the approximation of 10^(-x) was rounded up to 54 bits
+                var P128 = UInt128()
+                __mul_64x64_to_128MACH(&P128, UInt64(C1), bid_ten2mk64[ind - 1]);
+                var Cstar = P128.w[1];
+                // the top Ex bits of 10^(-x) are T* = bid_ten2mk128trunc[ind].w[0], e.g.
+                // if x=1, T*=bid_ten2mk128trunc[0].w[0]=0x1999999999999999
+                // C* = floor(C*) (logical right shift; C has p decimal digits,
+                //     correct by Property 1)
+                // n = C* * 10^(e+x)
+                
+                // shift right C* by Ex-64 = bid_shiftright128[ind]
+                let shift = bid_shiftright128[ind - 1]; // 0 <= shift <= 39
+                Cstar = Cstar >> shift;
+                
+                if x_sign != 0 {
+                    res = -Int(Cstar)
+                } else {
+                    res = Int(Cstar)
+                }
+            } else if (exp == 0) {
+                // 1 <= q <= 7
+                // res = +/-C (exact)
+                if x_sign != 0 {
+                    res = -Int(C1)
+                } else {
+                    res = Int(C1)
+                }
+            } else { // if (exp > 0) => 1 <= exp <= 18, 1 <= q <= 7, 2 <= q + exp <= 20
+                // (the upper limit of 20 on q + exp is due to the fact that
+                // +/-C * 10^exp is guaranteed to fit in 64 bits)
+                // res = +/-C * 10^exp (exact)
+                if x_sign != 0 {
+                    res = -Int(UInt64(C1) * bid_ten2k64[exp])
+                } else {
+                    res = Int(UInt64(C1) * bid_ten2k64[exp])
+                }
+            }
+        }
+        return res
     }
     
 }
 
-extension BID32 {
+extension Decimal32 {
     
-    static func bid32_to_string (_ ps: inout String, _ x: BID32, _ round: Rounding, _ pfpsf: Status) {
+    static func bid32_to_string (_ ps: inout String, _ x: Decimal32, _ round: Rounding, _ pfpsf: Status) {
         let x = x.x
         // unpack arguments, check for NaN or Infinity
         var sign_x = UInt32(0), coefficient_x = UInt32(0)
@@ -890,7 +1101,7 @@ extension BID32 {
     }
     
     
-    static func bid32_from_string (_ res: inout BID32, _ ps: String, _ rnd_mode: Rounding, _ pfpsf: inout Status) {
+    static func bid32_from_string (_ res: inout Decimal32, _ ps: String, _ rnd_mode: Rounding, _ pfpsf: inout Status) {
         // eliminate leading whitespace
         var ps = ps.trimmingCharacters(in: .whitespaces).lowercased()
         
@@ -901,37 +1112,37 @@ extension BID32 {
         if c == "\0" || (c != "." && c != "-" && c != "+" && (c < "0" || c > "9")) {
             // Infinity?
             if c == "i" && (ps.hasPrefix("nfinity") || ps.hasPrefix("nf")) {
-                res = BID32(raw: 0x78000000)
+                res = Decimal32(raw: 0x78000000)
                 return
             }
             // return sNaN
             if c == "s" && ps.hasPrefix("nan") {
                 // case insensitive check for snan
-                res = BID32(raw: 0x7e000000)
+                res = Decimal32(raw: 0x7e000000)
                 return
             } else {
                 // return qNaN
-                res = BID32(raw: 0x7c000000)
+                res = Decimal32(raw: 0x7c000000)
                 return
             }
         }
         // detect +INF or -INF
         if ps.hasPrefix("infinity") || ps.hasPrefix("inf") {
             if c == "+" {
-                res = BID32(raw: 0x78000000)
+                res = Decimal32(raw: 0x78000000)
             } else if c == "-" {
-                res = BID32(raw: 0xf8000000)
+                res = Decimal32(raw: 0xf8000000)
             } else {
-                res = BID32(raw: 0x7c000000)
+                res = Decimal32(raw: 0x7c000000)
             }
             return
         }
         // if +sNaN, +SNaN, -sNaN, or -SNaN
         if ps.hasPrefix("snan") {
             if c == "-" {
-                res = BID32(raw: 0xfe000000)
+                res = Decimal32(raw: 0xfe000000)
             } else {
-                res = BID32(raw: 0x7e000000)
+                res = Decimal32(raw: 0x7e000000)
             }
             return
         }
@@ -950,7 +1161,7 @@ extension BID32 {
         // if c isn"t a decimal point or a decimal digit, return NaN
         if c != "." && (c < "0" || c > "9") {
             // return NaN
-            res = BID32(raw:0x7c000000 | sign_x)
+            res = Decimal32(raw:0x7c000000 | sign_x)
             return
         }
         
@@ -985,13 +1196,13 @@ extension BID32 {
                             if right_radix_leading_zeros < 0 {
                                 right_radix_leading_zeros = 0
                             }
-                            res = BID32(raw:(UInt32(right_radix_leading_zeros) << 23) | sign_x)
+                            res = Decimal32(raw:(UInt32(right_radix_leading_zeros) << 23) | sign_x)
                             return
                         }
                         c = ps.isEmpty ? "\0" : ps.removeFirst()
                     } else {
                         // if 2 radix points, return NaN
-                        res = BID32(raw:0x7c000000 | sign_x)
+                        res = Decimal32(raw:0x7c000000 | sign_x)
                         return
                     }
                 } else if !ps.isEmpty {
@@ -999,7 +1210,7 @@ extension BID32 {
                     if (right_radix_leading_zeros<0) {
                         right_radix_leading_zeros=0;
                     }
-                    res = BID32(raw: (UInt32(right_radix_leading_zeros) << 23) | sign_x)
+                    res = Decimal32(raw: (UInt32(right_radix_leading_zeros) << 23) | sign_x)
                     return
                 }
             }
@@ -1015,7 +1226,7 @@ extension BID32 {
             if c == "." {
                 if rdx_pt_enc {
                     // return NaN
-                    res = BID32(raw:0x7c000000 | sign_x)
+                    res = Decimal32(raw:0x7c000000 | sign_x)
                     return
                 }
                 rdx_pt_enc = true
@@ -1084,7 +1295,7 @@ extension BID32 {
         
         if c != "e" {
             // return NaN
-            res = BID32(raw: 0x7c000000 | sign_x)
+            res = Decimal32(raw: 0x7c000000 | sign_x)
             return
         }
         c = ps.isEmpty ? "\0" : ps.removeFirst()
@@ -1095,7 +1306,7 @@ extension BID32 {
         }
         if ps.isEmpty || c < "0" || c > "9" {
             // return NaN
-            res = BID32(raw: 0x7c000000 | sign_x)
+            res = Decimal32(raw: 0x7c000000 | sign_x)
             return
         }
         
@@ -1109,7 +1320,7 @@ extension BID32 {
         
         if c != "\0" {
             // return NaN
-            res = BID32(raw: 0x7c000000 | sign_x)
+            res = Decimal32(raw: 0x7c000000 | sign_x)
             return
         }
         

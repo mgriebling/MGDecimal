@@ -21,41 +21,39 @@ struct UInt256 { var w = [UInt64](repeating: 0, count: 4) }
 struct UInt128 { var w = [UInt64](repeating: 0, count: 2) }
 
 @inlinable func unpack_binary64(_ x:Double, _ s: inout Int, _ e: inout Int, _ c: inout UInt64, _ t: inout Int, _ status: inout Status) {
-    var c = x.bitPattern
-    e = Int((c >> 52) & ((UInt64(1)<<11)-1))
-    s = Int(c >> 63)
-    c = c & ((1<<52)-1);
+    let expMask = 1<<11 - 1
+    e = Int(x.bitPattern >> 52) & expMask
+    c = x.significandBitPattern
+    s = x.sign == .minus ? 1 : 0
     if e == 0 {
-        if c == 0 { return }
+        if c == 0 { return } // number = 0
+        
+        // denormalized number
         let l = clz64(c) - (64 - 53)
-        c = c << l;
+        c = c << l
         e = -Int(l + 1074)
         t = 0
         status.insert(.subnormal)
-        // __set_status_flags(pfpsf,BID_DENORMAL_EXCEPTION);
-    } else if e == (1<<11)-1 {
-        if c == 0 { return }
-        if c&(1<<51) == 0 {
-            status.insert(.invalidOperation)
-            // __set_status_flags(pfpsf,BID_INVALID_EXCEPTION)
-        }
+    } else if e == expMask {
+        if c == 0 { return } // number = infinity
+        status.insert(.invalidOperation)
         // nan(s,(c << 13),0)
     } else {
-        c += 1<<52;
+        c |= 1 << 52  // set upper bit
+        e -= 1075
         t = ctz64(c)
-        e -= 1075;
     }
 }
 
-@inlinable func return_bid32_max(_ s:Int) -> BID32 { return_bid32(s,191,9_999_999) }
-@inlinable func return_bid32_zero(_ s:Int) -> BID32 { return_bid32(s,101,0) }
-@inlinable func return_bid32_inf(_ s:Int) -> BID32 { return_bid32(s,(0xF<<4),0) }
-@inlinable func return_bid32_nan(_ s:Int, _ c_hi:UInt64, _ c_lo:UInt64) -> BID32 {
+@inlinable func return_bid32_max(_ s:Int) -> Decimal32 { return_bid32(s,191,9_999_999) }
+@inlinable func return_bid32_zero(_ s:Int) -> Decimal32 { return_bid32(s,101,0) }
+@inlinable func return_bid32_inf(_ s:Int) -> Decimal32 { return_bid32(s,(0xF<<4),0) }
+@inlinable func return_bid32_nan(_ s:Int, _ c_hi:UInt64, _ c_lo:UInt64) -> Decimal32 {
     return_bid32(s, 0x1F<<3, c_hi>>44 > 999_999 ? 0 : Int(c_hi>>44))
 }
 
-@inlinable func return_bid32_ovf(_ s:Int) -> BID32 {
-    let rnd_mode = BID32.rounding
+func return_bid32_ovf(_ s:Int) -> Decimal32 {
+    let rnd_mode = Decimal32.rounding
     if ((rnd_mode == BID_ROUNDING_TO_ZERO) || (rnd_mode==(s != 0 ? BID_ROUNDING_UP : BID_ROUNDING_DOWN))) {
         return return_bid32_max(s)
     } else {
@@ -63,11 +61,11 @@ struct UInt128 { var w = [UInt64](repeating: 0, count: 2) }
     }
 }
 
-@inlinable func return_bid32(_ s:Int, _ e:Int, _ c:Int) -> BID32 {
+@inlinable func return_bid32(_ s:Int, _ e:Int, _ c:Int) -> Decimal32 {
     if UInt32(c) < (1<<23) {
-        return BID32(raw: (UInt32(s) << 31) + (UInt32(e) << 23) + UInt32(c))
+        return Decimal32(raw: (UInt32(s) << 31) + (UInt32(e) << 23) + UInt32(c))
     } else {
-        return BID32(raw: (UInt32(s) << 31) + UInt32((0x3<<29) - (1<<23)) + (UInt32(e) << 21) + UInt32(c))
+        return Decimal32(raw: (UInt32(s) << 31) + UInt32((0x3<<29) - (1<<23)) + (UInt32(e) << 21) + UInt32(c))
     }
 }
 
@@ -75,29 +73,27 @@ struct UInt128 { var w = [UInt64](repeating: 0, count: 2) }
 // The "short" form requires a shift 0 < c < 64 and will be faster
 // Note that shifts of 64 can't be relied on as ANSI
 
-@inlinable func sll128_short(_ hi:inout UInt64, _ lo:inout UInt64, _ c:Int) {
-    hi = (hi << c) + (lo>>(64-c))
-    lo = lo << c
+func sll128_short(_ hi:UInt64, _ lo:UInt64, _ c:Int) -> UInt128 {
+    UInt128(w: [lo << c, (hi << c) + (lo>>(64-c))])
 }
 
-@inlinable func sll128(_ hi:inout UInt64, _ lo:inout UInt64, _ c:Int) {
-    if c == 0 { return }
-    if c >= 64 { hi = lo << (c - 64); lo = 0 }
-    else { sll128_short(&hi,&lo,c) }
+func sll128(_ hi:UInt64, _ lo:UInt64, _ c:Int) -> UInt128 {
+    if c == 0 { return UInt128(w: [lo, hi]) }
+    if c >= 64 { return UInt128(w: [0, lo << (c - 64)]) }
+    else { return sll128_short(hi, lo, c) }
 }
 
 // Shift 2-part 2^64 * hi + lo right by "c" bits
 // The "short" form requires a shift 0 < c < 64 and will be faster
 // Note that shifts of 64 can't be relied on as ANSI
-@inlinable func srl128_short(_ hi:inout UInt64, _ lo:inout UInt64, _ c:Int) {
-   lo = (hi << (64 - c)) + (lo >> c)
-   hi = hi >> c
+func srl128_short(_ hi:UInt64, _ lo:UInt64, _ c:Int) -> UInt128 {
+    UInt128(w: [(hi << (64 - c)) + (lo >> c), hi >> c])
 }
 
-@inlinable func srl128(_ hi:inout UInt64, _ lo:inout UInt64, _ c:Int) {
-    if c == 0 { return }
-    if c >= 64 { lo = hi >> ((c) - 64); hi = 0 }
-    else { srl128_short(&hi,&lo,c) }
+func srl128(_ hi:UInt64, _ lo:UInt64, _ c:Int) -> UInt128 {
+    if c == 0 { return UInt128(w: [lo, hi]) }
+    if c >= 64 { return UInt128(w: [hi >> (c - 64), 0]) }
+    else { return srl128_short(hi, lo, c) }
 }
 
 // Compare "<" two 2-part unsigned integers
@@ -117,8 +113,8 @@ struct UInt128 { var w = [UInt64](repeating: 0, count: 2) }
 @inlinable func clz64(_ n:UInt64) -> Int { n.leadingZeroBitCount }
 
 func __mul_64x256_to_320(_ P:inout UInt384, _ A:UInt64, _ B:UInt256) {
-    var lP0,lP1,lP2,lP3:UInt128
-    var lC:UInt64
+    var lP0=UInt128(), lP1=UInt128(), lP2=UInt128(), lP3=UInt128()
+    var lC:UInt64=0
     __mul_64x64_to_128(&lP0, A, B.w[0]);
     __mul_64x64_to_128(&lP1, A, B.w[1]);
     __mul_64x64_to_128(&lP2, A, B.w[2]);
@@ -133,8 +129,8 @@ func __mul_64x256_to_320(_ P:inout UInt384, _ A:UInt64, _ B:UInt256) {
 // 128x256->384 bit multiplication (missing from existing macros)
 // I derived this by propagating (A).w[2] = 0 in __mul_192x256_to_448
 func __mul_128x256_to_384(_  P: inout UInt384, _ A:UInt128, _ B:UInt256) {
-    var P0,P1:UInt384
-    var CY:UInt64
+    var P0=UInt384(),P1=UInt384()
+    var CY:UInt64=0
     __mul_64x256_to_320(&P0, A.w[0], B);
     __mul_64x256_to_320(&P1, A.w[1], B);
     P.w[0] = P0.w[0];
@@ -152,7 +148,7 @@ func __mul_128x256_to_384(_  P: inout UInt384, _ A:UInt128, _ B:UInt256) {
 //
 func __mul_64x64_to_128(_ P: inout UInt128, _ CX:UInt64, _ CY:UInt64) {
     let res = CX.multipliedFullWidth(by: CY)
-    P.w[0] = res.high; P.w[1] = res.low
+    P.w[1] = res.high; P.w[0] = res.low
 //BID_UINT64 CXH, CXL, CYH,CYL,PL,PH,PM,PM2;
 //    CXH = (CX) >> 32;
 //    CXL = (BID_UINT32)(CX);
@@ -187,14 +183,14 @@ func __mul_128x128_low(_ Ql: inout UInt128, _ A:UInt128, _ B:UInt128) {
 
 @inlinable func __add_carry_in_out(_ S: inout UInt64, _ CY: inout UInt64, _ X:UInt64, _ Y:UInt64, _ CI: UInt64) {
     let X1 = X + CI;
-    S = X1 + Y;
+    S = X1 &+ Y;
     CY = ((S<X1) || (X1<CI)) ? 1 : 0;
 }
 
 // 64x64-bit product
 func __mul_64x64_to_128MACH(_ P128: inout UInt128, _ CX:UInt64, _ CY:UInt64)  {
     let res = CX.multipliedFullWidth(by: CY)
-    P128.w[0] = res.high; P128.w[1] = res.low
+    P128.w[1] = res.high; P128.w[0] = res.low
 //  BID_UINT64 CXH,CXL,CYH,CYL,PL,PH,PM,PM2;
 //  CXH = (CX64) >> 32;
 //  CXL = (BID_UINT32)(CX64);

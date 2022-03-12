@@ -10,8 +10,11 @@ final class MGDecimalTests: XCTestCase {
         // MGDecimal128.test()
         
 //        let x = BID32(raw: 0xA23003D0)  // -7.50
-        let y = BID32(stringLiteral: "123456789")
-        print(y)
+//        let y = BID32(stringLiteral: "123456789")
+        let y = Decimal32(stringLiteral: "234.5")
+        let x = Decimal32(stringLiteral: "345.5")
+        let z = y/x
+        print(x, y, x*y, z, x.int, y.int)
         
     }
     

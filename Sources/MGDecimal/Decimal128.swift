@@ -1,27 +1,11 @@
 import Foundation
 
 /// Decimal128 implementation according to IEEE 754.
-/// This implementation requires a UInt128 pre-existing data type.
 /// A UInt128 implementation is included as part of this library.
-public struct MGDecimal128  {
+public struct Decimal128 {
     
     // Binary Integer Decimal implementation
-    private typealias BID128 = UInt128
-    private let dn128: BID128     // Note: this includes a sign bit, 17-bit combination, and 110-bits of significand
-    
-    /* parameters for MGDecimal128 */
-    static let Bytes   =    16      /* length                          */
-    static let Pmax    =    34      /* maximum precision (digits)      */
-    static let Emin    = -6143      /* minimum adjusted exponent       */
-    static let Emax    =  6144      /* maximum adjusted exponent       */
-    static let EmaxD   =     4      /* maximum exponent digits         */
-    static let Bias    =  6176      /* bias for the exponent           */
-    static let String  =    43      /* maximum string length, +1       */
-    static let EconL   =    12      /* exponent continuation length    */
-    static let Declets =    11      /* count of declets                */
-    
-    /* highest biased exponent (Elimit-1) */
-    static let Ehigh = Emax + Bias - (Pmax-1)
+    var x:UInt128      // Note: this includes a sign bit, 17-bit combination, and 110-bits of significand
     
     public static func test() {
 //        let x = UInt128(1000)
@@ -45,7 +29,7 @@ public struct MGDecimal128  {
 //        print(b.v)
     }
     
-    private init(_ value: BID128) { dn128 = value } // Note: dn128 is a BID number
+    init(raw: UInt128) { x = raw } // Note: internal use only
     
 //    public init(_ value: Int64) {
 //        // add the sign bit
@@ -109,7 +93,7 @@ public struct MGDecimal128  {
 
 /// Numerical properties
 ///
-extension MGDecimal128 {
+extension Decimal128 {
     
 //    public var sign: FloatingPointSign { dn128 & MGDecimal128.negativeBit != 0 ? .minus : .plus }
 //
@@ -174,7 +158,7 @@ extension MGDecimal128 {
 
 /// special constants
 ///
-extension MGDecimal128 {
+extension Decimal128 {
    
 //    public static let greatestFiniteMagnitude = MGDecimal128(sign: .plus, exponent: MGDecimal128.maxExponent, mantissa: MGDecimal128.maxSignificand)
 //    public static let leastFiniteMagnitude = MGDecimal128(sign: .plus, exponent: 1-MGDecimal128.maxExponent, mantissa: MGDecimal128.maxSignificand)
@@ -191,18 +175,18 @@ extension MGDecimal128 {
 
 }
 
-extension MGDecimal128 /* : SignedNumeric */ {
+extension Decimal128 /* : SignedNumeric */ {
 
 //    public init?<T>(exactly source: T) where T : BinaryInteger { self.init(Int64(source)) }
     
 //    public var magnitude: MGDecimal128 { MGDecimal128(sign: .plus, exponent: exponent, mantissa: _significand) }
     
-    public static func * (lhs: MGDecimal128, rhs: MGDecimal128) -> MGDecimal128 {
+    public static func * (lhs: Decimal128, rhs: Decimal128) -> Decimal128 {
         assertionFailure("Unimplemented '*' function")
         return lhs
     }
     
-    public static func *= (result: inout MGDecimal128, arg: MGDecimal128) {
+    public static func *= (result: inout Decimal128, arg: Decimal128) {
         assertionFailure("Unimplemented '*=' function")
     }
 
@@ -293,10 +277,10 @@ extension MGDecimal128 /* : SignedNumeric */ {
 //     
 //}
 
-extension MGDecimal128 : Codable { }  // Supported by default methods
-extension MGDecimal128 : Hashable { } // Supported by default methods
+// extension MGDecimal128 : Codable { }  // Supported by default methods
+// extension MGDecimal128 : Hashable { } // Supported by default methods
 
-extension MGDecimal128 /* : CustomStringConvertible */ {
+extension Decimal128 /* : CustomStringConvertible */ {
     
     // Produce a textual representation of the number
 //    public var description: String {
@@ -319,20 +303,20 @@ extension MGDecimal128 /* : CustomStringConvertible */ {
    
 }
 
-extension MGDecimal128 /* : FloatingPoint */ {
+extension Decimal128 /* : FloatingPoint */ {
 
-    public static func / (lhs: MGDecimal128, rhs: MGDecimal128) -> MGDecimal128 { lhs /* TBD */ }
-    public static func /= (lhs: inout MGDecimal128, rhs: MGDecimal128) { /* TBD */ }
+    public static func / (lhs: Decimal128, rhs: Decimal128) -> Decimal128 { lhs /* TBD */ }
+    public static func /= (lhs: inout Decimal128, rhs: Decimal128) { /* TBD */ }
     
     public mutating func round(_ rule: FloatingPointRoundingRule) { /* TBD */ }
-    public mutating func formRemainder(dividingBy other: MGDecimal128) { /* TBD */ }
-    public mutating func formTruncatingRemainder(dividingBy other: MGDecimal128) { /* TBD */ }
+    public mutating func formRemainder(dividingBy other: Decimal128) { /* TBD */ }
+    public mutating func formTruncatingRemainder(dividingBy other: Decimal128) { /* TBD */ }
     public mutating func formSquareRoot() { /* TBD */ }
-    public mutating func addProduct(_ lhs: MGDecimal128, _ rhs: MGDecimal128) { /* TBD */ }
+    public mutating func addProduct(_ lhs: Decimal128, _ rhs: Decimal128) { /* TBD */ }
     
 }
 
-extension MGDecimal128 /* : BinaryFloatingPoint */ {
+extension Decimal128 /* : BinaryFloatingPoint */ {
     
     public static var exponentBitCount: Int { 0
     }
