@@ -18,15 +18,15 @@ public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, E
     // MARK: - Class State variables
     public static private(set) var state : Status = .clearFlags
     public static private(set) var rounding : Rounding = .halfEven
-    public static let zero = return_bid32_zero(0)
+    public static let zero = Decimal32(raw: return_bid32_zero(0))
     public static let radix = 10
     public static let pi = Decimal32(floatLiteral: Double.pi)
-    public static let nan = return_bid32_nan(0, 0, 0)
-    public static let quietNaN = return_bid32_nan(0, 0, 0)
+    public static let nan = Decimal32(raw: return_bid32_nan(0, 0, 0))
+    public static let quietNaN = Decimal32(raw: return_bid32_nan(0, 0, 0))
     public static let signalingNaN = zero // TBD
-    public static let infinity = return_bid32_inf(0)
+    public static let infinity = Decimal32(raw: return_bid32_inf(0))
     
-    public static var greatestFiniteMagnitude: Decimal32 { return_bid32_max(0) }
+    public static var greatestFiniteMagnitude: Decimal32 { Decimal32(raw: return_bid32_max(0)) }
     public static var leastNormalMagnitude: Decimal32 { zero /* TBD */ }
     public static var leastNonzeroMagnitude: Decimal32 { zero /* TBD */ }
     
@@ -47,7 +47,7 @@ public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, E
     }
     
     public init(floatLiteral value: Double) {
-        self = Decimal32.double_to_bid32(value, Decimal32.rounding, &Decimal32.state)
+        x = Decimal32.double_to_bid32(value, Decimal32.rounding, &Decimal32.state)
         if !Decimal32.state.isEmpty { print("Warning: \(Decimal32.state)"); Decimal32.state = .clearFlags }
     }
 
@@ -64,7 +64,8 @@ public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, E
     }
     
     public init(signOf: Decimal32, magnitudeOf: Decimal32) {
-        self.init() // TBD
+        let sign = signOf.isSignMinus
+        self = sign ? -magnitudeOf.magnitude : magnitudeOf.magnitude
     }
     
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -80,7 +81,7 @@ public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, E
 }
 
 extension Decimal32 : AdditiveArithmetic, Comparable, SignedNumeric, Strideable, FloatingPoint {
-    
+
     public mutating func round(_ rule: FloatingPointRoundingRule) {
         /* TBD */
     }
@@ -146,12 +147,16 @@ public extension Decimal32 {
     
     var significand: Decimal32 {
         let s = unpack()
-        return return_bid32(0, 0, Int(s.significand))
+        return Decimal32(raw: return_bid32(0, 0, Int(s.significand)))
     }
     
     var decimal: Decimal {
         // Not optimized but should be ok since this is rarely used -- feel free to fix me
         Decimal(string: self.description) ?? Decimal()
+    }
+    
+    var decimal64: Decimal64 {
+        Decimal64(raw: Decimal64.BID32_to_BID64(x, &Decimal32.state))
     }
     
     var exponent: Int {
@@ -164,7 +169,7 @@ public extension Decimal32 {
     }
     
     var double: Double {
-        0
+        Decimal32.bid32_to_double(x, Decimal32.rounding, &Decimal32.state)
     }
     
     private var _isZero: Bool {
@@ -186,11 +191,7 @@ public extension Decimal32 {
                 return true
             }
         } else if (x & Decimal32.MASK_INF32) == Decimal32.MASK_INF32 {
-            if (x & 0x03ffffff) != 0 {
-                return false
-            } else {
-                return true
-            }
+            return (x & 0x03ffffff) == 0
         } else if (x & Decimal32.MASK_STEERING_BITS32) == Decimal32.MASK_STEERING_BITS32 { // 24-bit
             return ((x & Decimal32.MASK_BINARY_SIG2_32) | Decimal32.MASK_BINARY_OR2_32) <= Decimal32.BID32_SIG_MAX
         } else { // 23-bit coeff.
@@ -198,77 +199,46 @@ public extension Decimal32 {
         }
     }
     
-    private var _isNormal: Bool {
-        if (x & Decimal32.INFINITY_MASK32) == Decimal32.INFINITY_MASK32 {
-            // x is either INF or NaN
-            return false
+    static private func validDecode(_ x: UInt32) -> (exp:Int, sig:UInt32)? {
+        let exp_x:Int
+        let sig_x:UInt32
+        if (x & INFINITY_MASK32) == INFINITY_MASK32 { return nil }
+        if (x & MASK_STEERING_BITS32) == MASK_STEERING_BITS32 {
+            sig_x = (x & MASK_BINARY_SIG2_32) | MASK_BINARY_OR2_32
+            // check for zero or non-canonical
+            if sig_x > Decimal32.BID32_SIG_MAX || sig_x == 0 { return nil } // zero or non-canonical
+            exp_x = Int((x & MASK_BINARY_EXPONENT2_32) >> 21)
         } else {
-            // decode number into exponent and significand
-            let exp_x:Int
-            let sig_x:UInt32
-            if ((x & Decimal32.MASK_STEERING_BITS32) == Decimal32.MASK_STEERING_BITS32) {
-                sig_x = (x & Decimal32.MASK_BINARY_SIG2_32) | Decimal32.MASK_BINARY_OR2_32;
-                // check for zero or non-canonical
-                if sig_x > Decimal32.BID32_SIG_MAX || sig_x == 0 {
-                    return false // zero or non-canonical
-                }
-                exp_x = Int((x & Decimal32.MASK_BINARY_EXPONENT2_32) >> 21)
-            } else {
-                sig_x = (x & Decimal32.MASK_BINARY_SIG1_32)
-                if sig_x == 0 {
-                    return false // zero
-                }
-                exp_x = Int((x & Decimal32.MASK_BINARY_EXPONENT1_32) >> 23)
-            }
-            // if exponent is less than -95, the number may be subnormal
-            // if (exp_x - 101 = -95) the number may be subnormal
-            if exp_x < 6 {
-                let sig_x_prime = UInt64(sig_x) * UInt64(Decimal32.bid_mult_factor[exp_x])
-                if sig_x_prime < 1000000 {
-                    return false // subnormal
-                } else {
-                    return true // normal
-                }
-            } else {
-                return true // normal
-            }
+            sig_x = (x & MASK_BINARY_SIG1_32)
+            if sig_x == 0 { return nil } // zero
+            exp_x = Int((x & MASK_BINARY_EXPONENT1_32) >> 23)
+        }
+        return (exp_x, sig_x)
+    }
+    
+    private var _isNormal: Bool {
+        guard let result = Decimal32.validDecode(x) else { return false }
+        
+        // if exponent is less than -95, the number may be subnormal
+        // if (exp_x - 101 = -95) the number may be subnormal
+        if result.exp < 6 {
+            let sig_x_prime = UInt64(result.sig) * UInt64(Decimal32.bid_mult_factor[result.exp])
+            return !(sig_x_prime < 1000000) // subnormal test
+        } else {
+            return true // normal
         }
     }
     
     private var _isSubnormal:Bool {
-        if (x & Decimal32.INFINITY_MASK32) == Decimal32.INFINITY_MASK32 {
-            // x is either INF or NaN
-            return false
+        guard let result = Decimal32.validDecode(x) else { return false }
+        
+        // if exponent is less than -95, the number may be subnormal
+        // if (exp_x - 101 = -95) the number may be subnormal
+        if result.exp < 6 {
+            let sig_x_prime = UInt64(result.sig) * UInt64(Decimal32.bid_mult_factor[result.exp])
+            return sig_x_prime < 1000000  // subnormal test
         } else {
-            // decode number into exponent and significand
-            let exp_x:Int
-            let sig_x:UInt32
-            if ((x & Decimal32.MASK_STEERING_BITS32) == Decimal32.MASK_STEERING_BITS32) {
-                sig_x = (x & Decimal32.MASK_BINARY_SIG2_32) | Decimal32.MASK_BINARY_OR2_32;
-                // check for zero or non-canonical
-                if (sig_x > 9999999 || sig_x == 0) {
-                    return false // zero or non-canonical
-                }
-                exp_x = Int((x & Decimal32.MASK_BINARY_EXPONENT2_32) >> 21)
-            } else {
-                sig_x = x & Decimal32.MASK_BINARY_SIG1_32
-                if sig_x == 0 {
-                    return false // zero
-                }
-                exp_x = Int((x & Decimal32.MASK_BINARY_EXPONENT1_32) >> 23)
-            }
-            // if exponent is less than -95, the number may be subnormal
-            // if (exp_x - 101 = -95) the number may be subnormal
-            if exp_x < 6 {
-                let sig_x_prime = UInt64(sig_x) * UInt64(Decimal32.bid_mult_factor[exp_x])
-                if sig_x_prime < 1000000 {
-                    return true // subnormal
-                } else {
-                    return false // normal
-                }
-            } else {
-                return false // normal
-            }
+            return false // normal
         }
     }
     

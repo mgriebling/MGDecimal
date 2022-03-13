@@ -113,7 +113,7 @@ extension Decimal32 {
         
         if diff_dec_expon > MAX_FORMAT_DIGITS_32 {
             let tempx = Double(coefficient_a)
-            let bin_expon = ((tempx.bitPattern & MASK_BINARY_EXPONENT) >> 52) - 0x3ff
+            let bin_expon = ((tempx.bitPattern & Decimal64.MASK_BINARY_EXPONENT) >> 52) - 0x3ff
             let scale_ca = bid_estimate_decimal_digits[Int(bin_expon)]
             
             let d2 = 16 - scale_ca
@@ -143,7 +143,7 @@ extension Decimal32 {
             n_digits=0;
         } else {
             let tempx = Double(P)
-            let bin_expon = ((tempx.bitPattern & MASK_BINARY_EXPONENT) >> 52) - 0x3ff;
+            let bin_expon = ((tempx.bitPattern & Decimal64.MASK_BINARY_EXPONENT) >> 52) - 0x3ff;
             n_digits = Int(bid_estimate_decimal_digits[Int(bin_expon)])
             if P >= bid_power10_table_128[n_digits].w[0] {
                 n_digits+=1
@@ -522,7 +522,7 @@ extension Decimal32 {
         //--- get number of bits in C64 ---
         // version 2 (original)
         let tempx = Double(P)
-        let bin_expon_p = ((tempx.bitPattern & MASK_BINARY_EXPONENT) >> 52)-0x3ff;
+        let bin_expon_p = ((tempx.bitPattern & Decimal64.MASK_BINARY_EXPONENT) >> 52)-0x3ff;
         var n_digits = bid_estimate_decimal_digits[Int(bin_expon_p)]
         if P >= bid_power10_table_128[Int(n_digits)].w[0] {
             n_digits+=1

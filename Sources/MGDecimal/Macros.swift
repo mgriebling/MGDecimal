@@ -20,13 +20,43 @@ struct UInt384 { var w = [UInt64](repeating: 0, count: 6) }
 struct UInt256 { var w = [UInt64](repeating: 0, count: 4) }
 struct UInt128 { var w = [UInt64](repeating: 0, count: 2) }
 
-@inlinable func unpack_binary64(_ x:Double, _ s: inout Int, _ e: inout Int, _ c: inout UInt64, _ t: inout Int, _ status: inout Status) {
+// Unpack decimal floating-point number x into sign,exponent,coefficient
+// In special cases, call the macros provided
+// Coefficient is normalized in the binary sense with postcorrection k,
+// so that x = 10^e * c / 2^k and the range of c is:
+//
+// 2^23 <= c < 2^24   (decimal32)
+// 2^53 <= c < 2^54   (decimal64)
+// 2^112 <= c < 2^113 (decimal128)
+@inlinable func unpack_bid32(_ x:UInt32, _ s: inout Int, _ e: inout Int, _ k: inout Int, _ c: inout UInt64, _ status: inout Status) -> Double? {
+    s = Int(x) >> 31
+    if ((x & (3<<29)) == (3<<29)) {
+        if ((x & (0xF<<27)) == (0xF<<27)) {
+            if ((x & (0x1F<<26)) != (0x1F<<26)) { return return_double_inf(s) }
+            if ((x & (1<<25)) != 0) { status.insert(.invalidOperation) }
+            return return_double_nan(s, UInt64(((x & 0xFFFFF) > 999999) ? 0 : Int(x) << 44), 0)
+        }
+        e = Int((x >> 21) & ((1<<8)-1)) - 101
+        c = UInt64((1<<23) + (x & ((1<<21)-1)))
+        if (UInt(c) > 9999999) { return return_double_zero(s) }
+        k = 0
+    } else {
+        e = Int((x >> 23) & ((1<<8)-1)) - 101
+        c = UInt64(x) & (UInt64(1)<<23 - 1)
+        if c == 0 { return return_double_zero(s) }
+        k = clz32(UInt32(c)) - 8
+        c = c << k
+    }
+    return nil
+}
+
+@inlinable func unpack_binary64(_ x:Double, _ s: inout Int, _ e: inout Int, _ c: inout UInt64, _ t: inout Int, _ status: inout Status) -> UInt64? {
     let expMask = 1<<11 - 1
     e = Int(x.bitPattern >> 52) & expMask
     c = x.significandBitPattern
     s = x.sign == .minus ? 1 : 0
     if e == 0 {
-        if c == 0 { return } // number = 0
+        if c == 0 { return UInt64(return_bid32_zero(s)) } // number = 0
         
         // denormalized number
         let l = clz64(c) - (64 - 53)
@@ -35,24 +65,36 @@ struct UInt128 { var w = [UInt64](repeating: 0, count: 2) }
         t = 0
         status.insert(.subnormal)
     } else if e == expMask {
-        if c == 0 { return } // number = infinity
+        if c == 0 { return UInt64(return_bid32_inf(s)) } // number = infinity
         status.insert(.invalidOperation)
-        // nan(s,(c << 13),0)
+        return UInt64(return_bid32_nan(s, (c << 13), 0))
     } else {
         c |= 1 << 52  // set upper bit
         e -= 1075
         t = ctz64(c)
     }
+    return nil
 }
 
-@inlinable func return_bid32_max(_ s:Int) -> Decimal32 { return_bid32(s,191,9_999_999) }
-@inlinable func return_bid32_zero(_ s:Int) -> Decimal32 { return_bid32(s,101,0) }
-@inlinable func return_bid32_inf(_ s:Int) -> Decimal32 { return_bid32(s,(0xF<<4),0) }
-@inlinable func return_bid32_nan(_ s:Int, _ c_hi:UInt64, _ c_lo:UInt64) -> Decimal32 {
+@inlinable func return_bid32_max(_ s:Int) -> UInt32 { return_bid32(s,191,9_999_999) }
+@inlinable func return_bid32_zero(_ s:Int) -> UInt32 { return_bid32(s,101,0) }
+@inlinable func return_bid32_inf(_ s:Int) -> UInt32 { return_bid32(s,(0xF<<4),0) }
+@inlinable func return_bid32_nan(_ s:Int, _ c_hi:UInt64, _ c_lo:UInt64) -> UInt32 {
     return_bid32(s, 0x1F<<3, c_hi>>44 > 999_999 ? 0 : Int(c_hi>>44))
 }
 
-func return_bid32_ovf(_ s:Int) -> Decimal32 {
+@inlinable func return_double_zero(_ s:Int) -> Double { return_double(s, 0, 0) }
+@inlinable func return_double_inf(_ s:Int) -> Double { return_double(s, 2047, 0) }
+@inlinable func return_double_nan(_ s:Int, _ c_hi:UInt64, _ c_lo:UInt64) -> Double {
+    return_double(s, 2047, (c_hi>>13)+(UInt64(1)<<51))
+}
+
+@inlinable func return_double(_ s:Int, _ e:Int, _ c:UInt64) -> Double {
+    let x = (UInt64(s) << 63) + (UInt64(e) << 52) + c
+    return Double(bitPattern: x)
+}
+
+func return_bid32_ovf(_ s:Int) -> UInt32 {
     let rnd_mode = Decimal32.rounding
     if ((rnd_mode == BID_ROUNDING_TO_ZERO) || (rnd_mode==(s != 0 ? BID_ROUNDING_UP : BID_ROUNDING_DOWN))) {
         return return_bid32_max(s)
@@ -61,11 +103,11 @@ func return_bid32_ovf(_ s:Int) -> Decimal32 {
     }
 }
 
-@inlinable func return_bid32(_ s:Int, _ e:Int, _ c:Int) -> Decimal32 {
+@inlinable func return_bid32(_ s:Int, _ e:Int, _ c:Int) -> UInt32 {
     if UInt32(c) < (1<<23) {
-        return Decimal32(raw: (UInt32(s) << 31) + (UInt32(e) << 23) + UInt32(c))
+        return (UInt32(s) << 31) + (UInt32(e) << 23) + UInt32(c)
     } else {
-        return Decimal32(raw: (UInt32(s) << 31) + UInt32((0x3<<29) - (1<<23)) + (UInt32(e) << 21) + UInt32(c))
+        return (UInt32(s) << 31) + UInt32((0x3<<29) - (1<<23)) + (UInt32(e) << 21) + UInt32(c)
     }
 }
 
@@ -111,6 +153,9 @@ func srl128(_ hi:UInt64, _ lo:UInt64, _ c:Int) -> UInt128 {
 
 // Counting leading zeros in an unsigned 64-bit word
 @inlinable func clz64(_ n:UInt64) -> Int { n.leadingZeroBitCount }
+
+// Counting leading zeros in an unsigned 64-bit word
+@inlinable func clz32(_ n:UInt32) -> Int { n.leadingZeroBitCount }
 
 func __mul_64x256_to_320(_ P:inout UInt384, _ A:UInt64, _ B:UInt256) {
     var lP0=UInt128(), lP1=UInt128(), lP2=UInt128(), lP3=UInt128()
