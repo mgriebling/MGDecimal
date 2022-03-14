@@ -39,6 +39,14 @@ public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, E
         if !Decimal32.state.isEmpty { print("Warning: \(Decimal32.state)"); Decimal32.state = .clearFlags }
     }
     
+    public init(_ value: Decimal64) {
+        x = Decimal64.BID64_to_BID32(value.x, Decimal32.rounding, &Decimal32.state)
+    }
+    
+    public init(_ value: Decimal128) {
+        x = Decimal128.BID128_to_BID32(value.x, Decimal32.rounding, &Decimal32.state)
+    }
+    
     public init(_ value: Int = 0) { self.init(integerLiteral: value) }
     public init<Source>(_ value: Source) where Source : BinaryInteger { self.init(Int(value)) }
     
@@ -61,6 +69,11 @@ public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, E
     public init(sign: FloatingPointSign, exponent: Int, significand: Decimal32) {
         let sgn = sign == .minus ? Decimal32.SIGN_MASK32 : 0
         self = Decimal32.get_BID32(sgn, exponent, significand.x, Decimal32.rounding, &Decimal32.state)
+    }
+    
+    public init(sign: FloatingPointSign, exponentBitPattern: UInt32, significandBitPattern: UInt32) {
+        let s = sign == .minus ? 1 : 0
+        x = return_bid32(s, Int(exponentBitPattern), Int(significandBitPattern))
     }
     
     public init(signOf: Decimal32, magnitudeOf: Decimal32) {
@@ -254,6 +267,29 @@ public extension Decimal32 {
     
     var ulp: Decimal32    { Decimal32.zero /* TBD */ }
     var nextUp: Decimal32 { Decimal32.zero /* TBD */ }
+    
+}
+
+extension Decimal32 : DecimalFloatingPoint {
+
+    public static var exponentBitCount: Int    { 8 }
+    public static var significandBitCount: Int { 23 }
+    
+    public var exponentBitPattern: UInt32 {
+        let x = unpack()
+        return UInt32(x.exponent)
+    }
+    
+    public var significandBitPattern: UInt32 {
+        let x = unpack()
+        return UInt32(x.significand)
+    }
+    
+    public var decade: Decimal32 {
+        0 /* TBD */
+    }
+    
+    public var significandWidth: Int { significandBitPattern.bitWidth - significandBitPattern.leadingZeroBitCount }
     
 }
 

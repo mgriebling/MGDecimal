@@ -125,11 +125,39 @@ func sll128(_ hi:UInt64, _ lo:UInt64, _ c:Int) -> UInt128 {
     else { return sll128_short(hi, lo, c) }
 }
 
+func __shl_128_long(_ Q:inout UInt128, _ A:UInt128, _ k:Int) {
+    if k<64 {
+        Q.w[1]  = A.w[1] << k;
+        Q.w[1] |= A.w[0] >> (64-k);
+        Q.w[0]  = A.w[0] << k;
+    } else {
+        Q.w[1] = A.w[0]<<((k)-64);
+        Q.w[0] = 0;
+    }
+}
+
+func __shr_128_long(_ Q:inout UInt128, _ A:UInt128, _ k:Int) {
+    if k<64 {
+        Q.w[0]  = A.w[0] >> k;
+        Q.w[0] |= A.w[1] << (64-k);
+        Q.w[1]  = A.w[1] >> k;
+    } else {
+        Q.w[0] = A.w[1]>>(k-64);
+        Q.w[1] = 0;
+    }
+}
+
 // Shift 2-part 2^64 * hi + lo right by "c" bits
 // The "short" form requires a shift 0 < c < 64 and will be faster
 // Note that shifts of 64 can't be relied on as ANSI
 func srl128_short(_ hi:UInt64, _ lo:UInt64, _ c:Int) -> UInt128 {
     UInt128(w: [(hi << (64 - c)) + (lo >> c), hi >> c])
+}
+
+func __shr_128(_ Q: inout UInt128, _ A: inout UInt128, _ k:Int) {
+     Q.w[0]  = A.w[0] >> k;
+     Q.w[0] |= A.w[1] << (64-k);
+     Q.w[1]  = A.w[1] >> k;
 }
 
 func srl128(_ hi:UInt64, _ lo:UInt64, _ c:Int) -> UInt128 {
@@ -146,6 +174,10 @@ func srl128(_ hi:UInt64, _ lo:UInt64, _ c:Int) -> UInt128 {
 // Likewise "<="
 @inlinable func le128(_ x_hi:UInt64, _ x_lo:UInt64, _ y_hi:UInt64, _ y_lo:UInt64) -> Bool {
   (((x_hi) < (y_hi)) || (((x_hi) == (y_hi)) && ((x_lo) <= (y_lo))))
+}
+
+func __unsigned_compare_ge_128(_ A:UInt128, _ B:UInt128) -> Bool {
+    (A.w[1]>B.w[1]) || ((A.w[1]==B.w[1]) && (A.w[0]>=B.w[0]))
 }
 
 // Counting trailing zeros in an unsigned 64-bit word
@@ -211,6 +243,22 @@ func __mul_64x64_to_128(_ P: inout UInt128, _ CX:UInt64, _ CY:UInt64) {
 //    (P).w[0] = (PM<<32)+(BID_UINT32)PL;
 }
 
+func __mul_128x128_full(_ Qh:inout UInt128, _ Ql:inout UInt128, _ A:UInt128, _ B:UInt128) {
+    var ALBL = UInt128(), ALBH = UInt128(), AHBL = UInt128(), AHBH = UInt128()
+                                                  
+    __mul_64x64_to_128(&ALBH, A.w[0], B.w[1]);
+    __mul_64x64_to_128(&AHBL, B.w[0], A.w[1]);
+    __mul_64x64_to_128(&ALBL, A.w[0], B.w[0]);
+    __mul_64x64_to_128(&AHBH, A.w[1], B.w[1]);
+            
+    var QM = UInt128(), QM2 = UInt128()
+    __add_128_128(&QM, ALBH, AHBL);
+    Ql.w[0] = ALBL.w[0];
+    __add_128_64(&QM2, QM, ALBL.w[1]);
+    __add_128_64(&Qh, AHBH, QM2.w[1]);
+    Ql.w[1] = QM2.w[0];
+}
+
 func __mul_128x128_low(_ Ql: inout UInt128, _ A:UInt128, _ B:UInt128) {
     var ALBL:UInt128 = UInt128(w: [0,0])
     __mul_64x64_to_128(&ALBL, A.w[0], B.w[0]);
@@ -218,6 +266,33 @@ func __mul_128x128_low(_ Ql: inout UInt128, _ A:UInt128, _ B:UInt128) {
                                                   
     Ql.w[0] = ALBL.w[0];
     Ql.w[1] = QM64 + ALBL.w[1];
+}
+
+/*********************************************************************
+ *
+ *      Add/Subtract Macros
+ *
+ *********************************************************************/
+// add 64-bit value to 128-bit
+func __add_128_64(_ R128:inout UInt128, _ A128:UInt128, _ B64:UInt64) {
+    var R64H = A128.w[1]
+    R128.w[0] = B64 + A128.w[0]
+    if R128.w[0] < B64 {
+        R64H += 1
+    }
+    R128.w[1] = R64H
+}
+
+// add 128-bit value to 128-bit
+// assume no carry-out
+func __add_128_128(_ R128:inout UInt128, _ A128:UInt128, _ B128:UInt128) {
+    var Q128 = UInt128()
+    Q128.w[1] = A128.w[1] + B128.w[1]
+    Q128.w[0] = B128.w[0] + A128.w[0]
+    if Q128.w[0] < B128.w[0] {
+        Q128.w[1] += 1
+    }
+    R128 = Q128
 }
 
 @inlinable func __add_carry_out(_ S: inout UInt64, _ CY: inout UInt64, _ X:UInt64, _ Y:UInt64) {
