@@ -20,6 +20,16 @@ struct UInt384 { var w = [UInt64](repeating: 0, count: 6) }
 struct UInt256 { var w = [UInt64](repeating: 0, count: 4) }
 struct UInt128 { var w = [UInt64](repeating: 0, count: 2) }
 
+func BID_SWAP128(_ x: inout UInt128) {
+    let one = 1
+    if one == one.bigEndian {
+        // swap 128 bit
+        let sw = x.w[1]
+        x.w[1] = x.w[0]
+        x.w[0] = sw
+    }
+}
+
 // Unpack decimal floating-point number x into sign,exponent,coefficient
 // In special cases, call the macros provided
 // Coefficient is normalized in the binary sense with postcorrection k,

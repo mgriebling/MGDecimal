@@ -34,6 +34,12 @@ public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, E
     // MARK: - Initializers
     public init(raw: UInt32) { x = raw } // only for internal use
     
+    /// Binary Integer Decimal encoded 32-bit number
+    public init(bid32: UInt32) { x = bid32 }
+    
+    /// Densely Packed Decimal encoded 32-bit number
+    public init(dpd32: UInt32) { x = Decimal32.dpd_to_bid32(dpd32) }
+    
     public init(integerLiteral value: Int) {
         self = Decimal32.int64_to_BID32(Int64(value), Decimal32.rounding, &Decimal32.state)
         if !Decimal32.state.isEmpty { print("Warning: \(Decimal32.state)"); Decimal32.state = .clearFlags }
@@ -66,14 +72,13 @@ public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, E
         self.x = x.x
     }
     
+    public init(sign: FloatingPointSign, exponentBitPattern: UInt32, significandDigits: [UInt8]) {
+        self.init()  /* TBD */
+    }
+    
     public init(sign: FloatingPointSign, exponent: Int, significand: Decimal32) {
         let sgn = sign == .minus ? Decimal32.SIGN_MASK32 : 0
         self = Decimal32.get_BID32(sgn, exponent, significand.x, Decimal32.rounding, &Decimal32.state)
-    }
-    
-    public init(sign: FloatingPointSign, exponentBitPattern: UInt32, significandBitPattern: UInt32) {
-        let s = sign == .minus ? 1 : 0
-        x = return_bid32(s, Int(exponentBitPattern), Int(significandBitPattern))
     }
     
     public init(signOf: Decimal32, magnitudeOf: Decimal32) {
@@ -152,15 +157,19 @@ public extension Decimal32 {
     var sign: FloatingPointSign { x & Decimal32.SIGN_MASK32 != 0 ? .minus : .plus }
     var magnitude: Decimal32 { Decimal32(raw: x & ~Decimal32.SIGN_MASK32) }
     
-    private func unpack () -> (sign: UInt32, exponent: Int, significand: UInt32) {
+    private func unpack () -> (sign: UInt32, exponent: Int, significand: UInt32)? {
         var s : (sign: UInt32, exponent: Int, significand: UInt32) = (UInt32(0), 0, UInt32(0))
-        _ = Decimal32.unpack_BID32 (&s.sign, &s.exponent, &s.significand, x)
-        return s
+        if Decimal32.unpack_BID32 (&s.sign, &s.exponent, &s.significand, x) {
+            return s
+        } else {
+            return nil
+        }
     }
     
     var significand: Decimal32 {
-        let s = unpack()
-        return Decimal32(raw: return_bid32(0, 0, Int(s.significand)))
+        var exp = 0, m = UInt32()
+        Decimal32.frexp(x, &m, &exp)
+        return Decimal32(raw: m)
     }
     
     var decimal: Decimal {
@@ -173,8 +182,9 @@ public extension Decimal32 {
     }
     
     var exponent: Int {
-        let s = unpack()
-        return s.exponent
+        var exp = 0, m = UInt32()
+        Decimal32.frexp(x, &m, &exp)
+        return exp
     }
     
     var int: Int {
@@ -264,6 +274,7 @@ public extension Decimal32 {
     var isNormal: Bool       { _isNormal }
     var isSubnormal: Bool    { _isSubnormal }
     var isCanonical: Bool    { _isCanonical }
+    var isBIDFormat: Bool    { true }
     
     var ulp: Decimal32    { Decimal32.zero /* TBD */ }
     var nextUp: Decimal32 { Decimal32.zero /* TBD */ }
@@ -272,24 +283,37 @@ public extension Decimal32 {
 
 extension Decimal32 : DecimalFloatingPoint {
 
-    public static var exponentBitCount: Int    { 8 }
-    public static var significandBitCount: Int { 23 }
+    public static var significandMaxDigitCount: Int { MAX_FORMAT_DIGITS_32 }
+    public static var exponentBitCount: Int { DECIMAL_MAX_EXPON_32.bitWidth - DECIMAL_MAX_EXPON_32.leadingZeroBitCount }
     
+    public var significandDigitCount: Int {
+        if let x = unpack() {
+            return Int(bid_nr_digits[x.significand.bitWidth - x.significand.leadingZeroBitCount].digits1)
+        } else {
+            return -1
+        }
+    }
+ 
     public var exponentBitPattern: UInt32 {
-        let x = unpack()
-        return UInt32(x.exponent)
+        if let x = unpack() {
+            return UInt32(x.exponent)
+        } else {
+            return 0
+        }
     }
     
-    public var significandBitPattern: UInt32 {
-        let x = unpack()
-        return UInt32(x.significand)
+    public var significandDigits: [UInt8] {
+        []
     }
     
     public var decade: Decimal32 {
-        0 /* TBD */
+        if let x = unpack() {
+            let digits = self.significandDigitCount
+            return Decimal32(raw: return_bid32(0, x.exponent+digits-1, 1))
+        } else {
+            return 1
+        }
     }
-    
-    public var significandWidth: Int { significandBitPattern.bitWidth - significandBitPattern.leadingZeroBitCount }
     
 }
 

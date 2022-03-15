@@ -53,7 +53,8 @@ extension Decimal128 {
      * Takes a BID128 as input and converts it to a BID32 and returns it.
      */
     static func BID128_to_BID32 (_ x: UInt128, _ rmode: Rounding, _ pfpsf: inout Status) -> UInt32 {
-        //      BID_SWAP128 (x);
+        var x = x
+        BID_SWAP128(&x)
         // unpack arguments, check for NaN or Infinity or 0
         var sign_x = UInt64(0), exponent_x = 0, CX = UInt128()
         if !unpack_BID128_value (&sign_x, &exponent_x, &CX, x) {
@@ -557,6 +558,56 @@ extension Decimal32 {
     static let UPPER_EXPON_LIMIT        = 51
     
     // **********************************************************************
+    
+    static func dpd_to_bid32 (_ pda: UInt32) -> UInt32 {
+        //  BID_UINT32 da = *pda;
+        //  BID_UINT32 in = *(BID_UINT32 *) & da;
+        //  BID_UINT32 res;
+        //
+        //  BID_UINT32 sign, comb, exp;
+        //  BID_UINT32 trailing;
+        //  BID_UINT32 d0 = 0, d1, d2;
+        //  BID_UINT64 bcoeff;
+        //  BID_UINT32 nanb = 0;
+        let in1 = pda
+        
+        let sign = (in1 & 0x80000000);
+        let comb = (in1 & 0x7ff00000) >> 20;
+        let trailing = Int(in1 & 0x000fffff)
+        var res : UInt32
+        var nanb = UInt32()
+        var exp = 0
+        var d0 = UInt32()
+        
+        if (comb & 0x7c0) == 0x780 {    // G0..G4 = 11110 -> Inf
+            return in1 & 0xf8000000
+        } else if (comb & 0x7c0) == 0x7c0 {    // G0..G5 = 11111 -> NaN
+            nanb = in1 & 0xfe000000
+            exp = 0
+        } else {
+            // Normal number
+            if ((comb & 0x600) == 0x600) {    // G0..G1 = 11 -> d0 = 8 + G4
+                d0 = ((comb >> 6) & 1) | 8;
+                exp = Int(((comb & 0x180) >> 1) | (comb & 0x3f))
+            } else {
+                d0 = (comb >> 6) & 0x7;
+                exp = Int(((comb & 0x600) >> 3) | (comb & 0x3f))
+            }
+        }
+        let d1 = bid_d2b2[(trailing >> 10) & 0x3ff];
+        let d2 = bid_d2b[(trailing) & 0x3ff];
+        
+        let bcoeff = UInt32(d2 + d1 + UInt64(1000000 * d0))
+        if (bcoeff < 0x800000) {
+            res = UInt32(exp << 23) | bcoeff | sign;
+        } else {
+            res = UInt32(exp << 21) | sign | 0x60000000 | (bcoeff & 0x1fffff);
+        }
+        
+        res |= nanb
+        return res
+    }
+
     
     static func bid32_to_double (_ x: UInt32, _ rmode: Rounding, _ pfpsf: inout Status) -> Double {
         var c = UInt128(), k = 0, e = 0, s = 0

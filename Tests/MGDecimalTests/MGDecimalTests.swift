@@ -14,8 +14,8 @@ final class MGDecimalTests: XCTestCase {
         let y = Decimal32(stringLiteral: "234.5")
         let x = Decimal32(stringLiteral: "345.5")
         let z = y/x
-        print(x, y, x*y, z, x.int, y.int)
-        
+        print(x, y, x*y, z, x.int, y.int, x.decade, y.decade)
+        print(x.significand, x.exponent, y.significand, y.exponent)
     }
     
 }

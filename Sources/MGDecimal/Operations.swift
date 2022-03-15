@@ -942,6 +942,79 @@ extension Decimal32 {
         }
         return fast_get_BID32 (0, exponent_q, Q);
     }
+    
+    /*
+     If x is not a floating-point number, the results are unspecified (this
+     implementation returns x and *exp = 0). Otherwise, the frexp function
+     returns the value res, such that res has a magnitude in the interval
+     [1/10, 1) or zero, and x = res*2^exp. If x is zero, both parts of the
+     result are zero. `frexp` does not raise any exceptions
+     */
+    static func frexp(_ x: UInt32, _ res: inout UInt32, _ exp: inout Int) {
+        if ((x & MASK_INF32) == MASK_INF32) {
+            // if NaN or infinity
+            exp = 0;
+            res = x;
+            // the binary frexp quitetizes SNaNs, so do the same
+            if ((x & MASK_SNAN32) == MASK_SNAN32) { // x is SNAN
+                //   // set invalid flag
+                //   *pfpsf |= BID_INVALID_EXCEPTION;
+                // return quiet (x)
+                res = x & 0xfdffffff;
+                // } else {
+                //   res = x;
+            }
+            return
+        } else {
+            // x is 0, non-canonical, normal, or subnormal
+            // decode number into exponent and significand
+            var exp_x = UInt32(), sig_x = UInt32()
+            if ((x & MASK_STEERING_BITS32) == MASK_STEERING_BITS32) {
+                exp_x = (x & MASK_BINARY_EXPONENT2_32) >> 21;
+                sig_x = (x & MASK_BINARY_SIG2_32) | MASK_BINARY_OR2_32;
+                // check for zero or non-canonical
+                if (sig_x > 9999999 || sig_x == 0) {
+                    exp = 0;
+                    res = (x & 0x80000000) | (exp_x << 23); // zero of the same sign
+                    return
+                }
+            } else {
+                exp_x = (x & MASK_BINARY_EXPONENT1_32) >> 23;
+                sig_x = (x & MASK_BINARY_SIG1_32);
+                if (sig_x == 0) {
+                    exp = 0;
+                    res = (x & 0x80000000) | (exp_x << 23); // zero of the same sign
+                    return
+                }
+            }
+            // x is normal or subnormal, with exp_x=biased exponent & sig_x=coefficient
+            // determine the number of decimal digits in sig_x, which fits in 24 bits
+            // q = nr. of decimal digits in sig_x (1 <= q <= 7)
+            //  determine first the nr. of bits in sig_x
+            let tmp = Float(sig_x) // exact conversion
+            let x_nr_bits = 1 + Int(((UInt(tmp.bitPattern >> 23)) & 0xff) - 0x7f)
+            var q = Int(bid_nr_digits[x_nr_bits - 1].digits)
+            if q == 0 {
+                q = Int(bid_nr_digits[x_nr_bits - 1].digits1)
+                if UInt64(sig_x) >= bid_nr_digits[x_nr_bits - 1].threshold_lo {
+                    q+=1
+                }
+            }
+            // Do not add trailing zeros if q < 7; leave sig_x with q digits
+            // sig_x = sig_x * bid_mult_factor[7 - q]; // sig_x has now 7 digits
+            exp = Int(exp_x) - 101 + q;
+            // assemble the result
+            if (sig_x < 0x00800000) { // sig_x < 2^23 (fits in 23 bits)
+                // res = (x & 0x80000000) | ((-q + 101) << 23) | sig_x;
+                res = UInt32(x & 0x807fffff) | UInt32((-q + 101) << 23); // replace exponent
+            } else { // sig_x fits in 24 bits, but not in 23
+                // res = (x & 0x80000000) | 0x60000000 |
+                //     ((-q + 101) << 21) | (sig_x & 0x001fffff);
+                res = UInt32(x & 0xe01fffff) | UInt32((-q + 101) << 21); // replace exponent
+            }
+            
+        }
+    }
 
 
 }
