@@ -27,8 +27,8 @@ public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, E
     public static let infinity = Decimal32(raw: return_bid32_inf(0))
     
     public static var greatestFiniteMagnitude: Decimal32 { Decimal32(raw: return_bid32_max(0)) }
-    public static var leastNormalMagnitude: Decimal32 { zero /* TBD */ }
-    public static var leastNonzeroMagnitude: Decimal32 { zero /* TBD */ }
+    public static var leastNormalMagnitude: Decimal32 { Decimal32(raw: return_bid32(0, 0, 1000000)) }
+    public static var leastNonzeroMagnitude: Decimal32 { Decimal32(raw: return_bid32(0, 0, 1)) }
     
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // MARK: - Initializers
@@ -113,7 +113,9 @@ extension Decimal32 : AdditiveArithmetic, Comparable, SignedNumeric, Strideable,
     }
     
     public mutating func formSquareRoot() { x = Decimal32.sqrt(x, Decimal32.rounding, &Decimal32.state) }
-    public mutating func addProduct(_ lhs: Decimal32, _ rhs: Decimal32) { self += lhs * rhs /* TBD - use FMA */ }
+    public mutating func addProduct(_ lhs: Decimal32, _ rhs: Decimal32) {
+        x = Decimal32.bid32_fma(lhs.x, rhs.x, self.x, Decimal32.rounding, &Decimal32.state)
+    }
 
     public func distance(to other: Decimal32) -> Decimal32 { other - self }
     public func advanced(by n: Decimal32) -> Decimal32 { self + n }
@@ -124,7 +126,6 @@ extension Decimal32 : AdditiveArithmetic, Comparable, SignedNumeric, Strideable,
     public func isEqual(to other: Decimal32) -> Bool { self == other }
     public func isLess(than other: Decimal32) -> Bool { self < other }
     public func isLessThanOrEqualTo(_ other: Decimal32) -> Bool { self < other || self == other }
-    public func isTotallyOrdered(belowOrEqualTo other: Decimal32) -> Bool { self < other }
     public static func == (lhs: Decimal32, rhs: Decimal32) -> Bool { Decimal32.equal(lhs.x, rhs.x, &Decimal32.state) }
     public static func < (lhs: Decimal32, rhs: Decimal32) -> Bool { Decimal32.lessThan(lhs.x, rhs.x, &Decimal32.state) }
     
@@ -177,22 +178,15 @@ public extension Decimal32 {
         Decimal(string: self.description) ?? Decimal()
     }
     
-    var decimal64: Decimal64 {
-        Decimal64(raw: Decimal64.BID32_to_BID64(x, &Decimal32.state))
-    }
+    var decimal64: Decimal64 { Decimal64(raw: Decimal64.BID32_to_BID64(x, &Decimal32.state)) }
+    var dpd32: UInt32 { Decimal32.bid_to_dpd32(x) }
+    var int: Int { Decimal32.bid32_to_int(x, Decimal32.rounding, &Decimal32.state) }
+    var double: Double { Decimal32.bid32_to_double(x, Decimal32.rounding, &Decimal32.state) }
     
     var exponent: Int {
         var exp = 0, m = UInt32()
         Decimal32.frexp(x, &m, &exp)
         return exp
-    }
-    
-    var int: Int {
-        Decimal32.bid32_to_int(x, Decimal32.rounding, &Decimal32.state)
-    }
-    
-    var double: Double {
-        Decimal32.bid32_to_double(x, Decimal32.rounding, &Decimal32.state)
     }
     
     private var _isZero: Bool {
@@ -208,7 +202,7 @@ public extension Decimal32 {
         if self.isNaN {    // NaN
             if (x & 0x01f00000) != 0 {
                 return false
-            } else if (x & 0x000fffff) > 999999 { // payload
+            } else if (x & 0x000fffff) > 999999 {
                 return false
             } else {
                 return true
@@ -246,7 +240,7 @@ public extension Decimal32 {
         // if (exp_x - 101 = -95) the number may be subnormal
         if result.exp < 6 {
             let sig_x_prime = UInt64(result.sig) * UInt64(Decimal32.bid_mult_factor[result.exp])
-            return !(sig_x_prime < 1000000) // subnormal test
+            return sig_x_prime >= 1000000 // subnormal test
         } else {
             return true // normal
         }
@@ -288,31 +282,28 @@ extension Decimal32 : DecimalFloatingPoint {
     
     public var significandDigitCount: Int {
         if let x = unpack() {
-            return Int(bid_nr_digits[x.significand.bitWidth - x.significand.leadingZeroBitCount].digits1)
-        } else {
-            return -1
+            return Decimal32.digitsIn(x.significand)
+            // return Int(bid_nr_digits[x.significand.bitWidth - x.significand.leadingZeroBitCount].digits1)
         }
+        return -1
     }
  
     public var exponentBitPattern: UInt32 {
-        if let x = unpack() {
-            return UInt32(x.exponent)
-        } else {
-            return 0
-        }
+        let x = unpack()
+        return UInt32(x?.exponent ?? 0)
     }
     
     public var significandDigits: [UInt8] {
-        []
+        if let x = unpack() {
+            return Array(String(x.significand)).map { UInt8($0.wholeNumberValue!) }
+        }
+        return []
     }
     
     public var decade: Decimal32 {
-        if let x = unpack() {
-            let digits = self.significandDigitCount
-            return Decimal32(raw: return_bid32(0, x.exponent+digits-1, 1))
-        } else {
-            return 1
-        }
+        var res = UInt32(), exp = 0
+        Decimal32.frexp(x, &res, &exp)
+        return Decimal32(raw: return_bid32(0, exp+Decimal32.DECIMAL_EXPONENT_BIAS_32, 1))
     }
     
 }

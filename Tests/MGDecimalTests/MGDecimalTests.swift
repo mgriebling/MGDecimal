@@ -13,9 +13,16 @@ final class MGDecimalTests: XCTestCase {
 //        let y = BID32(stringLiteral: "123456789")
         let y = Decimal32(stringLiteral: "234.5")
         let x = Decimal32(stringLiteral: "345.5")
+        let n = UInt32(0xA23003D0)
+        let a = Decimal32(dpd32: n)
+        print(a, a.dpd32 == n ? "a = n" : "a != n")
         let z = y/x
+        print(x.significandDigitCount, x.significandDigits)
+        print(y.significandDigitCount, y.significandDigits)
         print(x, y, x*y, z, x.int, y.int, x.decade, y.decade)
         print(x.significand, x.exponent, y.significand, y.exponent)
+        let b = Decimal32.leastNormalMagnitude
+        print(Decimal32.greatestFiniteMagnitude, b, Decimal32.leastNonzeroMagnitude)
     }
     
 }

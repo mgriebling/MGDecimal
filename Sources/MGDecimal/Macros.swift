@@ -228,6 +228,15 @@ func __mul_128x256_to_384(_  P: inout UInt384, _ A:UInt128, _ B:UInt256) {
     P.w[5] = P1.w[4] + CY;
 }
 
+func __mul_64x128_low(_ Ql:inout UInt128, _ A:UInt64, _ B:UInt128) {
+    var ALBL = UInt128(), ALBH = UInt128(), QM2 = UInt128()
+    __mul_64x64_to_128(&ALBH, A, B.w[1])
+    __mul_64x64_to_128(&ALBL, A, B.w[0])
+    Ql.w[0] = ALBL.w[0]
+    __add_128_64(&QM2, ALBH, ALBL.w[1])
+    Ql.w[1] = QM2.w[0]
+}
+
 /*****************************************************
  *      Unsigned Multiply Macros
  *****************************************************/
