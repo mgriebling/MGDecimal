@@ -126,7 +126,15 @@ public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, E
 extension Decimal32 : AdditiveArithmetic, Comparable, SignedNumeric, Strideable, FloatingPoint {
     
     public mutating func round(_ rule: FloatingPointRoundingRule) {
-        /* TBD */
+        switch rule {
+            case .toNearestOrEven: break
+            case .toNearestOrAwayFromZero: break
+            case .down: break
+            case .up: break
+            case .towardZero: break
+            case .awayFromZero: break
+            @unknown default: break
+        }
     }
     
     public mutating func formRemainder(dividingBy other: Decimal32) {
@@ -155,13 +163,11 @@ extension Decimal32 : AdditiveArithmetic, Comparable, SignedNumeric, Strideable,
     public static func < (lhs: Decimal32, rhs: Decimal32) -> Bool { Decimal32.lessThan(lhs.x, rhs.x, &Decimal32.state) }
     
     public static func / (lhs: Decimal32, rhs: Decimal32) -> Decimal32 {
-        let res = Decimal32.div(lhs.x, rhs.x, Decimal32.rounding, &Decimal32.state)
-        return Decimal32(raw: res)
+        Decimal32(raw: Decimal32.div(lhs.x, rhs.x, Decimal32.rounding, &Decimal32.state))
     }
     
     public static func * (lhs: Decimal32, rhs: Decimal32) -> Decimal32 {
-        let res = Decimal32.mul(lhs.x, rhs.x, Decimal32.rounding, &Decimal32.state)
-        return Decimal32(raw: res)
+        Decimal32(raw: Decimal32.mul(lhs.x, rhs.x, Decimal32.rounding, &Decimal32.state))
     }
     
     public static func /= (lhs: inout Decimal32, rhs: Decimal32) { lhs = lhs / rhs }
@@ -170,8 +176,7 @@ extension Decimal32 : AdditiveArithmetic, Comparable, SignedNumeric, Strideable,
     public static func - (lhs: Decimal32, rhs: Decimal32) -> Decimal32 { lhs + (-rhs) }
     
     public static func + (lhs: Decimal32, rhs: Decimal32) -> Decimal32 {
-        let res = Decimal32.add(lhs.x, rhs.x, Decimal32.rounding, &Decimal32.state)
-        return Decimal32(raw: res)
+        Decimal32(raw: Decimal32.add(lhs.x, rhs.x, Decimal32.rounding, &Decimal32.state))
     }
     
 }
