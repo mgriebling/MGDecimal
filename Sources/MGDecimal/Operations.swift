@@ -296,16 +296,15 @@ extension Decimal32 {
     static func lessThan (_ x: UInt32, _ y: UInt32, _ status: inout Status) -> Bool {
         // NaN (CASE1)
         // if either number is NAN, the comparison is unordered : return 0
-        if (((x & NAN_MASK32) == NAN_MASK32) || ((y & NAN_MASK32) == NAN_MASK32)) {
+        if (x & NAN_MASK32) == NAN_MASK32 || (y & NAN_MASK32) == NAN_MASK32 {
             // *pfpsf |= BID_INVALID_EXCEPTION;    // set invalid exception if NaN
             status.insert(.invalidOperation)
             return false
         }
         // SIMPLE (CASE2)
         // if all the bits are the same, these numbers are equal.
-        if x == y {
-            return false
-        }
+        if x == y { return false }
+        
         // INFINITY (CASE3)
         if (x & INFINITY_MASK32) == INFINITY_MASK32 {
             // if x==neg_inf, { res = (y == neg_inf)?0:1; BID_RETURN (res) }
@@ -323,34 +322,35 @@ extension Decimal32 {
             return (y & SIGN_MASK32) != SIGN_MASK32
         }
         // if steering bits are 11 (condition will be 0), then exponent is G[0:w+1] =>
-        var exp_x, exp_y, sig_x, sig_y: UInt32
+        var exp_x, exp_y: Int
+        var sig_x, sig_y: UInt32
         var non_canon_x, non_canon_y: Bool
         if (x & SPECIAL_ENCODING_MASK32) == SPECIAL_ENCODING_MASK32 {
-            exp_x = (x & MASK_BINARY_EXPONENT2_32) >> 21;
+            exp_x = Int((x & MASK_BINARY_EXPONENT2_32) >> 21)
             sig_x = (x & SMALL_COEFF_MASK32) | LARGE_COEFF_HIGH_BIT32
-            if (sig_x > 9999999) {
+            if sig_x > 9999999 {
                 non_canon_x = true
             } else {
                 non_canon_x = false
             }
         } else {
-            exp_x = (x & MASK_BINARY_EXPONENT1_32) >> 23;
-            sig_x = (x & LARGE_COEFF_MASK32);
+            exp_x = Int((x & MASK_BINARY_EXPONENT1_32) >> 23)
+            sig_x = x & LARGE_COEFF_MASK32
             non_canon_x = false
         }
         
         // if steering bits are 11 (condition will be 0), then exponent is G[0:w+1] =>
         if (y & SPECIAL_ENCODING_MASK32) == SPECIAL_ENCODING_MASK32 {
-            exp_y = (y & MASK_BINARY_EXPONENT2_32) >> 21;
+            exp_y = Int((y & MASK_BINARY_EXPONENT2_32) >> 21)
             sig_y = (y & SMALL_COEFF_MASK32) | LARGE_COEFF_HIGH_BIT32
-            if (sig_y > 9999999) {
+            if sig_y > 9999999 {
                 non_canon_y = true
             } else {
                 non_canon_y = false
             }
         } else {
-            exp_y = (y & MASK_BINARY_EXPONENT1_32) >> 23;
-            sig_y = (y & LARGE_COEFF_MASK32);
+            exp_y = Int((y & MASK_BINARY_EXPONENT1_32) >> 23)
+            sig_y = y & LARGE_COEFF_MASK32
             non_canon_y = false
         }
         
@@ -361,72 +361,74 @@ extension Decimal32 {
         //      therefore ignore the exponent field
         //    (Any non-canonical # is considered 0)
         var x_is_zero = false, y_is_zero = false
-        if (non_canon_x || sig_x == 0) {
+        if non_canon_x || sig_x == 0 {
             x_is_zero = true
         }
-        if (non_canon_y || sig_y == 0) {
+        if non_canon_y || sig_y == 0 {
             y_is_zero = true
         }
+        
         // if both numbers are zero, they are equal
-        if (x_is_zero && y_is_zero) {
+        if x_is_zero && y_is_zero {
             return false
+        } else if x_is_zero {
+            // if x is zero, it is less than if Y is positive
+            return (y & SIGN_MASK32) != SIGN_MASK32
+        } else if y_is_zero {
+            // if y is zero, X is less if it is negative
+            return (x & SIGN_MASK32) == SIGN_MASK32
         }
-        // if x is zero, it is lessthan if Y is positive
-        else if (x_is_zero) {
-            return ((y & SIGN_MASK32) != SIGN_MASK32)
-        }
-        // if y is zero, X is less if it is negative
-        else if (y_is_zero) {
-            return ((x & SIGN_MASK32) == SIGN_MASK32);
-        }
+        
         // OPPOSITE SIGN (CASE5)
         // now, if the sign bits differ, x is less than if y is positive
-        if (((x ^ y) & SIGN_MASK32) == SIGN_MASK32) {
-            return ((y & SIGN_MASK32) != SIGN_MASK32);
+        if ((x ^ y) & SIGN_MASK32) == SIGN_MASK32 {
+            return (y & SIGN_MASK32) != SIGN_MASK32
         }
+        
         // REDUNDANT REPRESENTATIONS (CASE6)
         // if both components are either bigger or smaller
-        if (sig_x > sig_y && exp_x >= exp_y) {
-            return ((x & SIGN_MASK32) == SIGN_MASK32);
+        if sig_x > sig_y && exp_x >= exp_y {
+            return (x & SIGN_MASK32) == SIGN_MASK32
         }
-        if (sig_x < sig_y && exp_x <= exp_y) {
-            return ((x & SIGN_MASK32) != SIGN_MASK32);
+        if sig_x < sig_y && exp_x <= exp_y {
+            return (x & SIGN_MASK32) != SIGN_MASK32
         }
-        // if exp_x is 6 greater than exp_y, no need for compensation
-        if (exp_x - exp_y > 6) {
-            return ((x & SIGN_MASK32) == SIGN_MASK32);
-        }
-        // difference cannot be greater than 10^6
         
-        // if exp_x is 6 less than exp_y, no need for compensation
-        if (exp_y - exp_x > 6) {
-            return ((x & SIGN_MASK32) != SIGN_MASK32);
+        // if exp_x is 6 greater than exp_y, no need for compensation
+        if exp_x - exp_y > 6 {
+            return (x & SIGN_MASK32) == SIGN_MASK32
         }
+        
+        // difference cannot be greater than 10^6
+        // if exp_x is 6 less than exp_y, no need for compensation
+        if exp_y - exp_x > 6 {
+            return (x & SIGN_MASK32) != SIGN_MASK32
+        }
+        
         // if |exp_x - exp_y| < 6, it comes down to the compensated significand
         var sig_n_prime: UInt64
-        if (exp_x > exp_y) {    // to simplify the loop below,
-            
+        if exp_x > exp_y {
             // otherwise adjust the x significand upwards
-            sig_n_prime = UInt64(sig_x) * UInt64(bid_mult_factor[Int(exp_x - exp_y)])
+            sig_n_prime = UInt64(sig_x) * UInt64(bid_mult_factor[exp_x - exp_y])
             
-            // return 0 if values are equal
-            if (sig_n_prime == sig_y) {
-                return false
-            }
+            // return false if values are equal
+            if sig_n_prime == sig_y { return false }
+            
             // if postitive, return whichever significand abs is smaller
             //     (converse if negative)
-            return ((sig_n_prime < sig_y) ? 1 : 0) ^ (((x & SIGN_MASK32) == SIGN_MASK32) ? 1 : 0) != 0
+            return (sig_n_prime < sig_y) != ((x & SIGN_MASK32) == SIGN_MASK32)
         }
         // adjust the y significand upwards
         sig_n_prime = UInt64(sig_y) * UInt64(bid_mult_factor[Int(exp_y - exp_x)])
         
         // return 0 if values are equal
-        if (sig_n_prime == sig_x) {
-            return false
-        }
+        if sig_n_prime == sig_x { return false }
+        
         // if positive, return whichever significand abs is smaller
         //     (converse if negative)
-        return ((sig_n_prime < sig_y) ? 1 : 0) ^ (((x & SIGN_MASK32) == SIGN_MASK32) ? 1 : 0) != 0
+        let arg1 = (sig_x < sig_n_prime)
+        let arg2 = ((x & SIGN_MASK32) == SIGN_MASK32)
+        return arg1 != arg2
     }
     
     static func mul (_ x:UInt32, _ y:UInt32, _ rmode:Rounding, _ status:inout Status) -> UInt32  {

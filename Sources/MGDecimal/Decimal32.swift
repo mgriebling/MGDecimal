@@ -8,8 +8,8 @@
 import Foundation
 
 public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, ExpressibleByIntegerLiteral,
-                          ExpressibleByFloatLiteral, CustomDebugStringConvertible {
-
+                          ExpressibleByFloatLiteral /* CustomDebugStringConvertible */ {
+    
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // MARK: - Data Type
     var x: UInt32   // 32-bit decimal number is stored here
@@ -34,56 +34,71 @@ public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, E
     // MARK: - Initializers
     public init(raw: UInt32) { x = raw } // only for internal use
     
+    private func showState() {
+        if !Decimal32.state.isEmpty { print("Warning: \(Decimal32.state)"); Decimal32.state = .clearFlags }
+    }
+    
     /// Binary Integer Decimal encoded 32-bit number
     public init(bid32: UInt32) { x = bid32 }
     
     /// Densely Packed Decimal encoded 32-bit number
-    public init(dpd32: UInt32) { x = Decimal32.dpd_to_bid32(dpd32) }
+    public init(dpd32: UInt32) { x = Decimal32.dpd_to_bid32(dpd32); showState() }
     
     public init(integerLiteral value: Int) {
         self = Decimal32.int64_to_BID32(Int64(value), Decimal32.rounding, &Decimal32.state)
-        if !Decimal32.state.isEmpty { print("Warning: \(Decimal32.state)"); Decimal32.state = .clearFlags }
+        showState()
     }
     
     public init(_ value: Decimal64) {
         x = Decimal64.BID64_to_BID32(value.x, Decimal32.rounding, &Decimal32.state)
+        showState()
     }
     
     public init(_ value: Decimal128) {
         x = Decimal128.BID128_to_BID32(value.x, Decimal32.rounding, &Decimal32.state)
+        showState()
     }
     
     public init(_ value: Int = 0) { self.init(integerLiteral: value) }
     public init<Source>(_ value: Source) where Source : BinaryInteger { self.init(Int(value)) }
     
     public init?<T>(exactly source: T) where T : BinaryInteger {
-        self.init() // stub
+        self.init(Int(source))  // FIX ME
+        showState()
     }
     
     public init(floatLiteral value: Double) {
         x = Decimal32.double_to_bid32(value, Decimal32.rounding, &Decimal32.state)
-        if !Decimal32.state.isEmpty { print("Warning: \(Decimal32.state)"); Decimal32.state = .clearFlags }
+        showState()
     }
 
     public init(stringLiteral value: String) {
         var x = Decimal32(raw: 0)
         Decimal32.bid32_from_string(&x, value, Decimal32.rounding, &Decimal32.state)
-        if !Decimal32.state.isEmpty { print("Warning: \(Decimal32.state)"); Decimal32.state = .clearFlags }
-        self.x = x.x
+        self = x
+        showState()
     }
     
     public init(sign: FloatingPointSign, exponentBitPattern: UInt32, significandDigits: [UInt8]) {
-        self.init()  /* TBD */
+        let mantissa = significandDigits.reduce(into: 0) { $0 = $0 * 10 + Int($1) }
+        self.init(sign: sign, exponent: Int(exponentBitPattern), significand: Decimal32(mantissa))
+        showState()
     }
     
     public init(sign: FloatingPointSign, exponent: Int, significand: Decimal32) {
         let sgn = sign == .minus ? Decimal32.SIGN_MASK32 : 0
-        self = Decimal32.get_BID32(sgn, exponent, significand.x, Decimal32.rounding, &Decimal32.state)
+        var s : (sign: UInt32, exponent: Int, significand: UInt32) = (UInt32(0), 0, UInt32(0))
+        self.init()
+        if Decimal32.unpack_BID32 (&s.sign, &s.exponent, &s.significand, significand.x) {
+            self = Decimal32.get_BID32(sgn, exponent, s.significand, Decimal32.rounding, &Decimal32.state)
+        }
+        showState()
     }
     
     public init(signOf: Decimal32, magnitudeOf: Decimal32) {
         let sign = signOf.isSignMinus
         self = sign ? -magnitudeOf.magnitude : magnitudeOf.magnitude
+        showState()
     }
     
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -91,10 +106,14 @@ public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, E
     public var description: String {
         var res = ""
         Decimal32.bid32_to_string(&res, self, Decimal32.rounding, Decimal32.state)
+        showState()
         return res
     }
     
-    public var debugDescription: String { String(x, radix: 16, uppercase: true) }
+    // This is used with output of [Decimal32] values ??
+//    public var debugDescription: String {
+//        String(x, radix: 16, uppercase: true)
+//    }
     
 }
 
@@ -277,14 +296,12 @@ public extension Decimal32 {
 
 extension Decimal32 : DecimalFloatingPoint {
 
+    public static var exponentMaximum: Int { DECIMAL_MAX_EXPON_32 }
+    public static var exponentBias: Int { DECIMAL_EXPONENT_BIAS_32 }
     public static var significandMaxDigitCount: Int { MAX_FORMAT_DIGITS_32 }
-    public static var exponentBitCount: Int { DECIMAL_MAX_EXPON_32.bitWidth - DECIMAL_MAX_EXPON_32.leadingZeroBitCount }
     
     public var significandDigitCount: Int {
-        if let x = unpack() {
-            return Decimal32.digitsIn(x.significand)
-            // return Int(bid_nr_digits[x.significand.bitWidth - x.significand.leadingZeroBitCount].digits1)
-        }
+        if let x = unpack() { return Decimal32.digitsIn(x.significand) }
         return -1
     }
  
@@ -303,7 +320,7 @@ extension Decimal32 : DecimalFloatingPoint {
     public var decade: Decimal32 {
         var res = UInt32(), exp = 0
         Decimal32.frexp(x, &res, &exp)
-        return Decimal32(raw: return_bid32(0, exp+Decimal32.DECIMAL_EXPONENT_BIAS_32, 1))
+        return Decimal32(raw: return_bid32(0, exp+Decimal32.exponentBias, 1))
     }
     
 }

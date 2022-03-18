@@ -1147,7 +1147,7 @@ extension Decimal32 {
         var rmode = rmode
         
         if coeff > 9999999 {
-            expon+=1
+            expon += 1
             coeff = 1000000
         }
         // check for possible underflow/overflow

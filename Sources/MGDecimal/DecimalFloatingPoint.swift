@@ -10,7 +10,7 @@ import Foundation
 /// A radix-10 (decimal) floating-point type.
 ///
 /// The `DecimalFloatingPoint` protocol extends the `FloatingPoint` protocol
-/// with operations specific to floating-point binary types, as defined by the
+/// with operations specific to floating-point decimal types, as defined by the
 /// [IEEE 754 specification][spec]. `DecimalFloatingPoint` is implemented in
 /// the standard library by `Decimal32`, `Decimal64`, and `Decimal128` where available.
 ///
@@ -22,18 +22,21 @@ public protocol DecimalFloatingPoint : ExpressibleByFloatLiteral, FloatingPoint 
 
     /// Creates a new instance from the specified sign and bit patterns.
     ///
-    /// The values passed as `exponentBitPattern` and `significandBitPattern` are
-    /// interpreted in the binary interchange format defined by the [IEEE 754
-    /// specification][spec].
+    /// The values passed as `exponentBitPattern` is interpreted in the
+    /// binary interchange format defined by the [IEEE 754 specification][spec].
     ///
     /// [spec]: http://ieeexplore.ieee.org/servlet/opac?punumber=4610933
+    ///
+    /// The `significandDigits` are the single-digit-per-element, big-endian
+    /// decimal digits of the number.  For example, the number [3, 1, 4,]
+    /// represents a significand of `314`.
     ///
     /// - Parameters:
     ///   - sign: The sign of the new value.
     ///   - exponentBitPattern: The bit pattern to use for the exponent field of
     ///     the new value.
-    ///   - significandBitPattern: The bit pattern to use for the significand
-    ///     field of the new value.
+    ///   - significandDigits: The binary-coded decimal digits, one per UInt8
+    ///     instance of the new value.
     init(sign: FloatingPointSign, exponentBitPattern: Self.RawExponent, significandDigits: [UInt8])
 
     /// Creates a new instance from the given value, rounded to the closest
@@ -73,30 +76,30 @@ public protocol DecimalFloatingPoint : ExpressibleByFloatLiteral, FloatingPoint 
     /// - Parameter value: A floating-point value to be converted.
     init?<Source>(exactly value: Source) where Source : DecimalFloatingPoint
 
-    /// The number of bits used to represent the type's exponent.
+    /// The maximum value of the `exponent` for normal, finite values
+    /// with the bias removed.
     ///
-    /// A decimal floating-point type's `exponentBitCount` imposes a limit on the
-    /// range of the exponent for normal, finite values. The *exponent bias* of
-    /// a type `F` can be calculated as the following, where `**` is
-    /// exponentiation:
+    /// The least normal exponent for values of the type `F` is `-exponentMaximum+1`,
+    /// and the largest finite exponent is `exponentMaximum`. An all-zeros exponent
+    /// is reserved for subnormals and zeros, and an all-ones exponent is reserved
+    /// for infinity and NaN.
     ///
-    ///     let bias = 10 ** (F.exponentBitCount - 1) - 1
+    /// For example, the `Decimal32` type has an `exponentMaximum` of `191` and
+    /// an exponent bias of `101`.  The unbiased `exponent` is given by
     ///
-    /// The least normal exponent for values of the type `F` is `1 - bias`, and
-    /// the largest finite exponent is `bias`. An all-zeros exponent is reserved
-    /// for subnormals and zeros, and an all-ones exponent is reserved for
-    /// infinity and NaN.
+    ///     exponent = exponentBitPattern - exponentBias + (significandMaxDigitCount-1)
     ///
-    /// For example, the `Decimal32` type has an `exponentBitCount` of 8, which gives
-    /// an exponent bias of `127` by the calculation above.
-    ///
-    ///     let bias = 10 ** (Decimal32.exponentBitCount - 1) - 1
-    ///     // bias == 127
-    ///     print(Float.greatestFiniteMagnitude.exponent)
-    ///     // Prints "127"
-    ///     print(Float.leastNormalMagnitude.exponent)
-    ///     // Prints "-126"
-    static var exponentBitCount: Int { get }
+    ///     let bias = Decimal32.exponentBias
+    ///     // bias == 101
+    ///     print(Decimal32.greatestFiniteMagnitude.exponent)
+    ///     // Prints "96"
+    ///     print(Decimal32.leastNormalMagnitude.exponent)
+    ///     // Prints "-95"
+    static var exponentMaximum: Int { get }
+    
+    /// The exponent bias is an offset applied to the `exponent` when encoding
+    /// to the Decimaln format.
+    static var exponentBias: Int { get }
 
     /// The maximum number of significand decimal digits.
     ///
@@ -183,7 +186,7 @@ extension DecimalFloatingPoint {
     ///
     ///     let a = -21.5
     ///     let b = 305.15
-    ///     let c = Double(signOf: a, magnitudeOf: b)
+    ///     let c = Decimal32(signOf: a, magnitudeOf: b)
     ///     print(c)
     ///     // Prints "-305.15"
     ///
@@ -343,23 +346,23 @@ extension DecimalFloatingPoint {
     public init?<Source>(exactly value: Source) where Source : DecimalFloatingPoint {
         if value.isNaN { return nil }
         
-        if (Source.exponentBitCount > Self.exponentBitCount
-            || Source.significandMaxDigitCount > Self.significandMaxDigitCount)
-            && value.isFinite && !value.isZero {
-            let exponent = value.exponent
-            if exponent < Self.leastNormalMagnitude.exponent {
-                if exponent < Self.leastNonzeroMagnitude.exponent { return nil }
-                if value.significandDigitCount >
-                    Int(Self.Exponent(exponent) - Self.leastNonzeroMagnitude.exponent) {
-                    return nil
-                }
-            } else {
-                if exponent > Self.greatestFiniteMagnitude.exponent { return nil }
-                if value.significandDigitCount > Self.greatestFiniteMagnitude.significandDigitCount {
-                    return nil
-                }
-            }
-        }
+//        if (Source.exponentBitCount > Self.exponentBitCount
+//            || Source.significandMaxDigitCount > Self.significandMaxDigitCount)
+//            && value.isFinite && !value.isZero {
+//            let exponent = value.exponent
+//            if exponent < Self.leastNormalMagnitude.exponent {
+//                if exponent < Self.leastNonzeroMagnitude.exponent { return nil }
+//                if value.significandDigitCount >
+//                    Int(Self.Exponent(exponent) - Self.leastNonzeroMagnitude.exponent) {
+//                    return nil
+//                }
+//            } else {
+//                if exponent > Self.greatestFiniteMagnitude.exponent { return nil }
+//                if value.significandDigitCount > Self.greatestFiniteMagnitude.significandDigitCount {
+//                    return nil
+//                }
+//            }
+//        }
         
         self = Self(value)
     }
@@ -390,22 +393,35 @@ extension DecimalFloatingPoint {
     public func isTotallyOrdered(belowOrEqualTo other: Self) -> Bool {
         // Quick return when possible.
         if self < other { return true }
-        if other > self { return false }
+        if self > other { return false }  // bug in original code? "other > self"
+        
         // Self and other are either equal or unordered.
         // Every negative-signed value (even NaN) is less than every positive-
         // signed value, so if the signs do not match, we simply return the
         // sign bit of self.
         if sign != other.sign { return sign == .minus }
+        
+        // Handle Nan and infinity
+        if isNaN && !other.isNaN { print(self, " > ", other); return false }
+        if !isNaN && other.isNaN { print(self, " < ", other); return true }
+        if isInfinite && !other.isInfinite { print(self, " > ", other); return false }
+        if !isInfinite && other.isInfinite { print(self, " < ", other); return true }
+        
         // Sign bits match; look at exponents.
-        if exponentBitPattern > other.exponentBitPattern { return sign == .minus }
-        if exponentBitPattern < other.exponentBitPattern { return sign == .plus }
+        if exponentBitPattern > other.exponentBitPattern { print(self, " < ", other); return sign == .minus }
+        if exponentBitPattern < other.exponentBitPattern { print(self, " > ", other); return sign == .plus }
+        
         // Signs and exponents match, look at significands.
-//        if significandDigits > other.significandDigits {
-//          return sign == .minus
-//        }
-//        if significandDigits < other.significandDigits {
-//          return sign == .plus
-//        }
+        if significandDigits.count > other.significandDigits.count {
+            print(self, " < ", other); return sign == .minus
+        }
+        if significandDigits.count < other.significandDigits.count {
+            print(self, " > ", other); return sign == .plus
+        }
+        
+        // Same sized significands -- compare them
+        if significandDigits.lexicographicallyPrecedes(other.significandDigits) { return sign == .minus }
+        if other.significandDigits.lexicographicallyPrecedes(significandDigits) { return sign == .plus }
         //  Sign, exponent, and significand all match.
         return true
     }
@@ -533,24 +549,14 @@ extension DecimalFloatingPoint {
         //  algorithm that handles that case correctly, but this precondition
         //  is an acceptable short-term fix.
         precondition(delta.isFinite, "There is no uniform distribution on an infinite range")
-//        let rand: Self.RawSignificand
-//        if Self.RawSignificand.bitWidth == Self.significandMaxDigitCount + 1 {
-//            rand = generator.next()
-//        } else {
-//            let significandCount = Self.significandMaxDigitCount + 1
-//            let maxSignificand: Self.RawSignificand = 1 << significandCount
-//            // Rather than use .next(upperBound:), which has to work with arbitrary
-//            // upper bounds, and therefore does extra work to avoid bias, we can take
-//            // a shortcut because we know that maxSignificand is a power of two.
-//            rand = generator.next() & (maxSignificand - 1)
-//        }
-//       let unitRandom = Self.init(rand) * (Self.ulpOfOne / 2)
-//        let randFloat = delta * unitRandom + range.lowerBound
-//        if randFloat == range.upperBound {
-//            return Self.random(in: range, using: &generator)
-//        }
-//        return randFloat
-        return range.lowerBound /* TBD */
+        let max = delta.significandDigits.reduce(into: 0) { $0 = $0 * 10 + UInt($1) } // delta maximum as integer
+        let r = generator.next(upperBound: max) // get a random integer up to the maximum
+        
+        // convert the integer to a Decimal number and scale to delta range
+        var d = Self.init(sign: delta.sign, exponent: Self.Exponent(delta.exponentBitPattern), significand: Self.init(r))
+        d += range.lowerBound // add the lower bound
+        if d == range.upperBound { return random(in: range, using: &generator) }  // try again
+        return d
     }
 
     /// Returns a random value within the specified range.
@@ -623,25 +629,13 @@ extension DecimalFloatingPoint {
         //  algorithm that handles that case correctly, but this precondition
         //  is an acceptable short-term fix.
         precondition(delta.isFinite, "There is no uniform distribution on an infinite range")
-//        let rand: Self.RawSignificand
-//        if Self.RawSignificand.bitWidth == Self.significandMaxDigitCount + 1 {
-//            rand = generator.next()
-//            let tmp: UInt8 = generator.next() & 1
-//            if rand == Self.RawSignificand.max && tmp == 1 {
-//                return range.upperBound
-//            }
-//        } else {
-//            let significandCount = Self.significandMaxDigitCount + 1
-//            let maxSignificand: Self.RawSignificand = 1 << significandCount
-//            rand = generator.next(upperBound: maxSignificand + 1)
-//            if rand == maxSignificand {
-//                return range.upperBound
-//            }
-//        }
-//        let unitRandom = Self.init(rand) * (Self.ulpOfOne / 2)
-//        let randFloat = delta * unitRandom + range.lowerBound
-//        return randFloat
-        return range.lowerBound /* TBD */
+        let max = delta.significandDigits.reduce(into: 0) { $0 = $0 * 10 + UInt($1) } // delta maximum as integer
+        let r = generator.next(upperBound: max) // get a random integer up to the maximum
+        
+        // convert the integer to a Decimal number and scale to delta range
+        var d = Self.init(sign: delta.sign, exponent: Self.Exponent(delta.exponentBitPattern), significand: Self.init(r))
+        d += range.lowerBound // add the lower bound
+        return d
     }
 
     /// Returns a random value within the specified range.
