@@ -46,6 +46,13 @@ final class MGDecimalTests: XCTestCase {
         numbers.sort { !$1.isTotallyOrdered(belowOrEqualTo: $0) }
         print(numbers)
         // Prints "[-9.5, 2.5, 3.0, 21.25, nan]"
+        
+        print("Decimal32.zero = ", Decimal32.zero)
+        print("Decimal32.pi = ", Decimal32.pi)
+        print("Decimal32.nan = ", Decimal32.nan)
+        print("Decimal32.quietNaN = ", Decimal32.quietNaN)
+        print("Decimal32.signalingNaN = ", Decimal32.signalingNaN)
+        print("Decimal32.infinity = ", Decimal32.infinity)
     }
     
 }

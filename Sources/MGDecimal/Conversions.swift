@@ -524,9 +524,11 @@ extension Decimal32 {
     // BID32 definitions
     ////////////////////////////////////////
     static let DECIMAL_MAX_EXPON_32     = 191
+    static let EXP_MIN32                = 0x00000000
     static let DECIMAL_EXPONENT_BIAS_32 = 101
     static let MAX_FORMAT_DIGITS_32     =   7
-    static let BID32_SIG_MAX            = 9999999
+    static let P7                       = MAX_FORMAT_DIGITS_32
+    static let BID32_SIG_MAX            = 9_999_999
 
     ////////////////////////////////////////
     // Constant Definitions

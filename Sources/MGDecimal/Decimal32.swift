@@ -8,34 +8,40 @@
 import Foundation
 
 public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, ExpressibleByIntegerLiteral,
-                          ExpressibleByFloatLiteral /* CustomDebugStringConvertible */ {
+                          ExpressibleByFloatLiteral {
+    
+    private var enableStateOutput = false   // set to true to monitor variable state (i.e., invalid operations, etc.)
     
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // MARK: - Data Type
+    // MARK: - Decimal number storage
     var x: UInt32   // 32-bit decimal number is stored here
     
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // MARK: - Class State variables
     public static private(set) var state : Status = .clearFlags
     public static private(set) var rounding : Rounding = .halfEven
+    
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // MARK: - Class State constants
     public static let zero = Decimal32(raw: return_bid32_zero(0))
     public static let radix = 10
     public static let pi = Decimal32(floatLiteral: Double.pi)
     public static let nan = Decimal32(raw: return_bid32_nan(0, 0, 0))
     public static let quietNaN = Decimal32(raw: return_bid32_nan(0, 0, 0))
-    public static let signalingNaN = zero // TBD
+    public static let signalingNaN = Decimal32(floatLiteral: Double.signalingNaN)
     public static let infinity = Decimal32(raw: return_bid32_inf(0))
     
     public static var greatestFiniteMagnitude: Decimal32 { Decimal32(raw: return_bid32_max(0)) }
-    public static var leastNormalMagnitude: Decimal32 { Decimal32(raw: return_bid32(0, 0, 1000000)) }
-    public static var leastNonzeroMagnitude: Decimal32 { Decimal32(raw: return_bid32(0, 0, 1)) }
+    public static var leastNormalMagnitude: Decimal32    { Decimal32(raw: return_bid32(0, 0, 1_000_000)) }
+    public static var leastNonzeroMagnitude: Decimal32   { Decimal32(raw: return_bid32(0, 0, 1)) }
     
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // MARK: - Initializers
-    public init(raw: UInt32) { x = raw } // only for internal use
+    init(raw: UInt32) { x = raw } // only for internal use
     
     private func showState() {
-        if !Decimal32.state.isEmpty { print("Warning: \(Decimal32.state)"); Decimal32.state = .clearFlags }
+        if enableStateOutput && !Decimal32.state.isEmpty { print("Warning: \(Decimal32.state)") }
+        Decimal32.state = .clearFlags
     }
     
     /// Binary Integer Decimal encoded 32-bit number
@@ -118,7 +124,7 @@ public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, E
 }
 
 extension Decimal32 : AdditiveArithmetic, Comparable, SignedNumeric, Strideable, FloatingPoint {
-
+    
     public mutating func round(_ rule: FloatingPointRoundingRule) {
         /* TBD */
     }
@@ -175,15 +181,16 @@ public extension Decimal32 {
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // MARK: - Numeric State variables
     var sign: FloatingPointSign { x & Decimal32.SIGN_MASK32 != 0 ? .minus : .plus }
-    var magnitude: Decimal32 { Decimal32(raw: x & ~Decimal32.SIGN_MASK32) }
+    var magnitude: Decimal32    { Decimal32(raw: x & ~Decimal32.SIGN_MASK32) }
+    var decimal64: Decimal64    { Decimal64(raw: Decimal64.BID32_to_BID64(x, &Decimal32.state)) }
+    var dpd32: UInt32           { Decimal32.bid_to_dpd32(x) }
+    var int: Int                { Decimal32.bid32_to_int(x, Decimal32.rounding, &Decimal32.state) }
+    var double: Double          { Decimal32.bid32_to_double(x, Decimal32.rounding, &Decimal32.state) }
     
     private func unpack () -> (sign: UInt32, exponent: Int, significand: UInt32)? {
         var s : (sign: UInt32, exponent: Int, significand: UInt32) = (UInt32(0), 0, UInt32(0))
-        if Decimal32.unpack_BID32 (&s.sign, &s.exponent, &s.significand, x) {
-            return s
-        } else {
-            return nil
-        }
+        guard Decimal32.unpack_BID32 (&s.sign, &s.exponent, &s.significand, x) else { return nil }
+        return s
     }
     
     var significand: Decimal32 {
@@ -196,11 +203,6 @@ public extension Decimal32 {
         // Not optimized but should be ok since this is rarely used -- feel free to fix me
         Decimal(string: self.description) ?? Decimal()
     }
-    
-    var decimal64: Decimal64 { Decimal64(raw: Decimal64.BID32_to_BID64(x, &Decimal32.state)) }
-    var dpd32: UInt32 { Decimal32.bid_to_dpd32(x) }
-    var int: Int { Decimal32.bid32_to_int(x, Decimal32.rounding, &Decimal32.state) }
-    var double: Double { Decimal32.bid32_to_double(x, Decimal32.rounding, &Decimal32.state) }
     
     var exponent: Int {
         var exp = 0, m = UInt32()
@@ -288,21 +290,23 @@ public extension Decimal32 {
     var isSubnormal: Bool    { _isSubnormal }
     var isCanonical: Bool    { _isCanonical }
     var isBIDFormat: Bool    { true }
-    
-    var ulp: Decimal32    { Decimal32.zero /* TBD */ }
-    var nextUp: Decimal32 { Decimal32.zero /* TBD */ }
+    var ulp: Decimal32       { nextUp - self }
+    var nextUp: Decimal32    { Decimal32(raw: Decimal32.bid32_nextup(x, &Decimal32.state)) }
     
 }
 
 extension Decimal32 : DecimalFloatingPoint {
+    
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // MARK: - DecimalFloatingPoint-required State variables
 
-    public static var exponentMaximum: Int { DECIMAL_MAX_EXPON_32 }
-    public static var exponentBias: Int { DECIMAL_EXPONENT_BIAS_32 }
+    public static var exponentMaximum: Int          { DECIMAL_MAX_EXPON_32 }
+    public static var exponentBias: Int             { DECIMAL_EXPONENT_BIAS_32 }
     public static var significandMaxDigitCount: Int { MAX_FORMAT_DIGITS_32 }
     
     public var significandDigitCount: Int {
-        if let x = unpack() { return Decimal32.digitsIn(x.significand) }
-        return -1
+        guard let x = unpack() else { return -1 }
+        return Decimal32.digitsIn(x.significand)
     }
  
     public var exponentBitPattern: UInt32 {
@@ -311,10 +315,8 @@ extension Decimal32 : DecimalFloatingPoint {
     }
     
     public var significandDigits: [UInt8] {
-        if let x = unpack() {
-            return Array(String(x.significand)).map { UInt8($0.wholeNumberValue!) }
-        }
-        return []
+        guard let x = unpack() else { return [] }
+        return Array(String(x.significand)).map { UInt8($0.wholeNumberValue!) }
     }
     
     public var decade: Decimal32 {

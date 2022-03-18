@@ -426,10 +426,126 @@ extension Decimal32 {
         
         // if positive, return whichever significand abs is smaller
         //     (converse if negative)
-        let arg1 = (sig_x < sig_n_prime)
-        let arg2 = ((x & SIGN_MASK32) == SIGN_MASK32)
-        return arg1 != arg2
+        return (sig_x < sig_n_prime) != ((x & SIGN_MASK32) == SIGN_MASK32)
     }
+    
+    /*****************************************************************************
+     *  BID32 nextup
+     ****************************************************************************/
+    static func bid32_nextup (_ x: UInt32, _ pfpsf: inout Status) -> UInt32 {
+        var x = x
+        var res : UInt32
+        
+        // check for NaNs and infinities
+        if (x & MASK_NAN32) == MASK_NAN32 { // check for NaN
+            if (x & 0x000fffff) > 999999 {
+                x = x & 0xfe000000 // clear G6-G10 and the payload bits
+            } else {
+                x = x & 0xfe0fffff // clear G6-G10
+            }
+            if (x & MASK_SNAN32) == MASK_SNAN32 { // SNaN
+                // set invalid flag
+                pfpsf.insert(.invalidOperation)
+                // pfpsf |= BID_INVALID_EXCEPTION;
+                // return quiet (SNaN)
+                res = x & 0xfdffffff
+            } else {    // QNaN
+                res = x
+            }
+            return res
+        } else if (x & MASK_INF32) == MASK_INF32 { // check for Infinity
+            if (x & MASK_SIGN32) == 0 { // x is +inf
+                res = 0x78000000
+            } else { // x is -inf
+                res = 0xf7f8967f    // -MAXFP = -9999999 * 10^emax
+            }
+            return res
+        }
+        // unpack the argument
+        let x_sign = x & MASK_SIGN32 // 0 for positive, MASK_SIGN32 for negative
+        var x_exp, C1:UInt32
+        // if steering bits are 11 (condition will be 0), then exponent is G[0:7]
+        if (x & MASK_STEERING_BITS32) == MASK_STEERING_BITS32 {
+            x_exp = (x & MASK_BINARY_EXPONENT2_32) >> 21 // biased
+            C1 = (x & MASK_BINARY_SIG2_32) | MASK_BINARY_OR2_32
+            if C1 > BID32_SIG_MAX {    // non-canonical
+                x_exp = 0
+                C1 = 0
+            }
+        } else {
+            x_exp = (x & MASK_BINARY_EXPONENT1_32) >> 23 // biased
+            C1 = x & MASK_BINARY_SIG1_32
+        }
+        
+        // check for zeros (possibly from non-canonical values)
+        if C1 == 0 {
+            // x is 0
+            res = 0x00000001 // MINFP = 1 * 10^emin
+        } else { // x is not special and is not zero
+            if x == 0x77f8967f {
+                // x = +MAXFP = 9999999 * 10^emax
+                res = 0x78000000 // +inf
+            } else if x == 0x80000001 {
+                // x = -MINFP = 1...99 * 10^emin
+                res = MASK_SIGN32 // -0
+            } else {    // -MAXFP <= x <= -MINFP - 1 ulp OR MINFP <= x <= MAXFP - 1 ulp
+                // can add/subtract 1 ulp to the significand
+                
+                // Note: we could check here if x >= 10^7 to speed up the case q1 = 7
+                // q1 = nr. of decimal digits in x (1 <= q1 <= 7)
+                //  determine first the nr. of bits in x
+                let tmp1 = Float(C1) // exact conversion
+                let x_nr_bits = 1 + Int((tmp1.bitPattern >> 23) & 0xff) - 0x7f
+                var q1 = Int(bid_nr_digits[x_nr_bits - 1].digits)
+                if q1 == 0 {
+                    q1 = Int( bid_nr_digits[x_nr_bits - 1].digits1)
+                    if (C1 >= bid_nr_digits[x_nr_bits - 1].threshold_lo) {
+                        q1+=1
+                    }
+                }
+                // if q1 < P7 then pad the significand with zeros
+                if q1 < P7 {
+                    let ind:Int
+                    if x_exp > (P7 - q1) {
+                        ind = P7 - q1; // 1 <= ind <= P7 - 1
+                        // pad with P7 - q1 zeros, until exponent = emin
+                        // C1 = C1 * 10^ind
+                        C1 = C1 * UInt32(bid_ten2k64[ind])
+                        x_exp = x_exp - UInt32(ind)
+                    } else { // pad with zeros until the exponent reaches emin
+                        ind = Int(x_exp)
+                        C1 = C1 * UInt32(bid_ten2k64[ind])
+                        x_exp = UInt32(EXP_MIN32)
+                    }
+                }
+                if x_sign == 0 {    // x > 0
+                    // add 1 ulp (add 1 to the significand)
+                    C1+=1
+                    if C1 == 0x989680 { // if  C1 = 10^7
+                        C1 = 0x0f4240 // C1 = 10^6
+                        x_exp+=1
+                    }
+                    // Ok, because MAXFP = 9999999 * 10^emax was caught already
+                } else {    // x < 0
+                    // subtract 1 ulp (subtract 1 from the significand)
+                    C1-=1
+                    if C1 == 0x0f423f && x_exp != 0 { // if  C1 = 10^6 - 1
+                        C1 = UInt32(BID32_SIG_MAX) // C1 = 10^7 - 1
+                        x_exp-=1
+                    }
+                }
+                // assemble the result
+                // if significand has 24 bits
+                if (C1 & MASK_BINARY_OR2_32) != 0 {
+                    res = x_sign | (x_exp << 21) | MASK_STEERING_BITS32 | (C1 & MASK_BINARY_SIG2_32)
+                } else {    // significand fits in 23 bits
+                    res = x_sign | (x_exp << 23) | C1;
+                }
+            } // end -MAXFP <= x <= -MINFP - 1 ulp OR MINFP <= x <= MAXFP - 1 ulp
+        } // end x is not special and is not zero
+        return res
+    }
+
     
     static func mul (_ x:UInt32, _ y:UInt32, _ rmode:Rounding, _ status:inout Status) -> UInt32  {
         var sign_x = UInt32(0), sign_y = UInt32(0), exponent_x = 0, exponent_y = 0
