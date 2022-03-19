@@ -13,8 +13,8 @@ public struct Decimal64 {
     
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // MARK: - Class State variables
-    public static private(set) var state : Status = .clearFlags
-    public static private(set) var rounding : Rounding = .halfEven
+    public static private(set) var state = Status.clearFlags
+    public static private(set) var rounding = Rounding.toNearestOrEven
     
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // MARK: - Initializers

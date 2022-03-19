@@ -8,7 +8,7 @@
 import Foundation
 
 public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, ExpressibleByIntegerLiteral,
-                          ExpressibleByFloatLiteral {
+                          ExpressibleByFloatLiteral, Codable, Hashable {
     
     private var enableStateOutput = false   // set to true to monitor variable state (i.e., invalid operations, etc.)
     
@@ -18,8 +18,8 @@ public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, E
     
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // MARK: - Class State variables
-    public static private(set) var state : Status = .clearFlags
-    public static private(set) var rounding : Rounding = .halfEven
+    public static private(set) var state = Status.clearFlags
+    public static private(set) var rounding = FloatingPointRoundingRule.toNearestOrEven
     
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // MARK: - Class State constants
@@ -123,20 +123,14 @@ public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, E
 extension Decimal32 : AdditiveArithmetic, Comparable, SignedNumeric, Strideable, FloatingPoint {
     
     public mutating func round(_ rule: FloatingPointRoundingRule) {
-        /* TBD */
-        switch rule {
-            case .toNearestOrEven: break
-            case .toNearestOrAwayFromZero: break
-            case .down: break
-            case .up: break
-            case .towardZero: break
-            case .awayFromZero: break
-            @unknown default: break
-        }
+        let dec64 = Decimal64.BID32_to_BID64(x, &Decimal32.state)
+        let res = Decimal64.bid64_round_integral_exact(dec64, rule, &Decimal32.state)
+        x = Decimal64.BID64_to_BID32(res, rule, &Decimal32.state)
     }
     
     public mutating func formRemainder(dividingBy other: Decimal32) {
-        /* TBD */
+        let rem = Decimal32.bid32_rem(self.x, other.x, &Decimal32.state)
+        self = Decimal32(raw: rem)
     }
     
     public mutating func formTruncatingRemainder(dividingBy other: Decimal32) {

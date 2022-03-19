@@ -11,12 +11,12 @@ final class MGDecimalTests: XCTestCase {
         
 //        let x = BID32(raw: 0xA23003D0)  // -7.50
 //        let y = BID32(stringLiteral: "123456789")
-        let y = Decimal32(stringLiteral: "234.5")
-        let x = Decimal32(stringLiteral: "345.5")
+        var y = Decimal32(stringLiteral: "234.5")
+        var x = Decimal32(stringLiteral: "345.5")
         let n = UInt32(0xA23003D0)
         var a = Decimal32(dpd32: n)
         print(a, a.dpd32 == n ? "a = n" : "a != n")
-        let z = y/x
+        var z = y/x
         print(x.significandDigitCount, x.significandDigits)
         print(y.significandDigitCount, y.significandDigits)
         print(x, y, x*y, z, x.int, y.int, x.decade, y.decade)
@@ -53,6 +53,27 @@ final class MGDecimalTests: XCTestCase {
         print("Decimal32.quietNaN = ", Decimal32.quietNaN)
         print("Decimal32.signalingNaN = ", Decimal32.signalingNaN)
         print("Decimal32.infinity = ", Decimal32.infinity)
+        
+        var a1 = Decimal32("8.625")
+        a1.formRemainder(dividingBy: Decimal32("0.75"))
+        print("8.625.formRemainder(dividingBy: 0.75) = ", a1)
+        
+        // Equivalent to the C 'round' function:
+        let w = Decimal32(6.5)
+        print(w.rounded(.toNearestOrAwayFromZero))
+        // w == 7.0
+        
+        // Equivalent to the C 'trunc' function:
+        print(w.rounded(.towardZero))
+        // x == 6.0
+        
+        // Equivalent to the C 'ceil' function:
+        print(w.rounded(.up))
+        // y == 7.0
+        
+        // Equivalent to the C 'floor' function:
+        print(w.rounded(.down))
+        // z == 6.0
     }
     
 }

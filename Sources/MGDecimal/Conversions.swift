@@ -277,25 +277,46 @@ extension Decimal64 {
     ////////////////////////////////////////
     // BID64 definitions
     ////////////////////////////////////////
-    static let DECIMAL_MAX_EXPON_64  = 767
-    static let DECIMAL_EXPONENT_BIAS = 398
-    static let MAX_FORMAT_DIGITS     = 16
+    static let DECIMAL_MAX_EXPON_64  =   767
+    static let DECIMAL_EXPONENT_BIAS =   398
+    static let MAX_FORMAT_DIGITS     =    16
+    static let expmin                = -6176 // min unbiased exponent
+    static let expmax                =  6111 // max unbiased exponent
+    static let expmin16              =  -398 // min unbiased exponent
+    static let expmax16              =   369 // max unbiased exponent
+    static let expmin7               =  -101 // min unbiased exponent
+    static let expmax7               =    90 // max unbiased exponent
     static let BID64_SIG_MAX         = 9_999_999_999_999_999
     
     ////////////////////////////////////////
     // Constant Definitions
     ///////////////////////////////////////
+    static let EXP_MIN                  = UInt64(0x0000_0000_0000_0000)  // EXP_MIN = (-6176 + 6176) << 49
+    static let EXP_MAX                  = UInt64(0x5ffe_0000_0000_0000)  // EXP_MAX = (6111 + 6176) << 49
+    static let EXP_MAX_P1               = UInt64(0x6000_0000_0000_0000)  // EXP_MAX + 1 = (6111 + 6176 + 1) << 49
+    static let EXP_P1                   = UInt64(0x0002_0000_0000_0000)
     static let SPECIAL_ENCODING_MASK64  = UInt64(0x6000_0000_0000_0000)
+    static let MASK_STEERING_BITS       = SPECIAL_ENCODING_MASK64
+    static let MASK_BINARY_EXPONENT1    = UInt64(0x7fe0_0000_0000_0000)
+    static let MASK_BINARY_SIG1         = SMALL_COEFF_MASK64
+    static let MASK_BINARY_EXPONENT2    = UInt64(0x1ff8_0000_0000_0000)
+    static let MASK_BINARY_SIG2         = UInt64(0x0007_ffff_ffff_ffff)
+    static let MASK_BINARY_OR2          = UInt64(0x0020_0000_0000_0000)
+    static let MASK_ANY_INF             = UInt64(0x7c00_0000_0000_0000)
     static let INFINITY_MASK64          = UInt64(0x7800_0000_0000_0000)
+    static let MASK_INF                 = INFINITY_MASK64
     static let SINFINITY_MASK64         = UInt64(0xf800_0000_0000_0000)
     static let SSNAN_MASK64             = UInt64(0xfc00_0000_0000_0000)
     static let NAN_MASK64               = UInt64(0x7c00_0000_0000_0000)
+    static let MASK_NAN                 = NAN_MASK64
     static let SNAN_MASK64              = UInt64(0x7e00_0000_0000_0000)
+    static let MASK_SNAN                = SNAN_MASK64
     static let QUIET_MASK64             = UInt64(0xfdff_ffff_ffff_ffff)
     static let LARGE_COEFF_MASK64       = UInt64(0x0007_ffff_ffff_ffff)
     static let LARGE_COEFF_HIGH_BIT64   = UInt64(0x0020_0000_0000_0000)
     static let SMALL_COEFF_MASK64       = UInt64(0x001f_ffff_ffff_ffff)
     static let SIGN_MASK64              = UInt64(0x8000_0000_0000_0000)
+    static let MASK_SIGN                = SIGN_MASK64
     static let EXPONENT_MASK64          = 0x3ff
     static let EXPONENT_SHIFT_LARGE64   = 51
     static let EXPONENT_SHIFT_SMALL64   = 53
@@ -416,7 +437,7 @@ extension Decimal64 {
         // unpack arguments, check for NaN or Infinity, 0
         var sign_x = UInt64(0), coefficient_x = UInt64(0), exponent_x = 0
         var res: UInt32
-        if unpack_BID64 (&sign_x, &exponent_x, &coefficient_x, x) {
+        if !unpack_BID64 (&sign_x, &exponent_x, &coefficient_x, x) {
             if (x & INFINITY_MASK64) == INFINITY_MASK64 {
                 let t64 = coefficient_x & 0x0003_ffff_ffff_ffff
                 res = UInt32(t64 / 1_000_000_000)
@@ -791,18 +812,18 @@ extension Decimal32 {
             // general correction from RN to RA, RM, RP, RZ; result uses ind for exp
             if rnd_mode != BID_ROUNDING_TO_NEAREST {
                 let x_sign = value < 0
-                if ((!x_sign && ((rnd_mode == .halfUp && is_inexact_lt_midpoint) ||
-                   ((rnd_mode == .halfEven || rnd_mode == .halfUp) && is_midpoint_gt_even))) ||
-                   (x_sign && ((rnd_mode == .halfDown && is_inexact_lt_midpoint) ||
-                   ((rnd_mode == .halfEven || rnd_mode == .halfDown) && is_midpoint_gt_even)))) {
+                if ((!x_sign && ((rnd_mode == .up && is_inexact_lt_midpoint) ||
+                    ((rnd_mode == .toNearestOrEven || rnd_mode == .up) && is_midpoint_gt_even))) ||
+                   (x_sign && ((rnd_mode == .down && is_inexact_lt_midpoint) ||
+                   ((rnd_mode == .toNearestOrEven || rnd_mode == .down) && is_midpoint_gt_even)))) {
                     res = res + 1
                     if res == 10_000_000 { // res = 10^7 => rounding overflow
                         res = 1_000_000 // 10^6
                         ind = ind + 1
                     }
                 } else if ((is_midpoint_lt_even || is_inexact_gt_midpoint) &&
-                          ((x_sign && (rnd_mode == .halfUp || rnd_mode == .down)) ||
-                          (!x_sign && (rnd_mode == .halfDown || rnd_mode == .down)))) {
+                           ((x_sign && (rnd_mode == .towardZero || rnd_mode == .down)) ||
+                            (!x_sign && (rnd_mode == .towardZero || rnd_mode == .down)))) {
                     res = res - 1
                     // check if we crossed into the lower decade
                     if res == 999_999 { // 10^6 - 1
@@ -1197,24 +1218,24 @@ extension Decimal32 {
             __mul_64x64_to_128 (&Q, UInt64(coeff), bid_reciprocals10_64[extra_digits]);
             
             // now get P/10^extra_digits: shift Q_high right by M[extra_digits]-128
-            let amount = bid_short_recip_scale[extra_digits];
+            let amount = bid_short_recip_scale[extra_digits]
             
-            var _C64 = Q.w[1] >> amount;
+            var _C64 = Q.w[1] >> amount
             var remainder_h = UInt64(0)
             
-            if rmode == .halfEven {   //BID_ROUNDING_TO_NEAREST
+            if rmode == BID_ROUNDING_TO_NEAREST {
                 if (_C64 & 1 != 0) {
                     // check whether fractional part of initial_P/10^extra_digits is exactly .5
                     
                     // get remainder
-                    let amount2 = 64 - amount;
+                    let amount2 = 64 - amount
                     remainder_h = 0
                     remainder_h &-= 1
-                    remainder_h >>= amount2;
+                    remainder_h >>= amount2
                     remainder_h = remainder_h & Q.w[1]
                     
-                    if (remainder_h == 0 && (Q.w[0] < bid_reciprocals10_64[extra_digits])) {
-                        _C64-=1
+                    if remainder_h == 0 && Q.w[0] < bid_reciprocals10_64[extra_digits] {
+                        _C64 -= 1
                     }
                 }
             }
@@ -1222,7 +1243,7 @@ extension Decimal32 {
             if fpsc.contains(.inexact) {
                 fpsc.insert(.underflow)
             } else {
-                var status = Status.inexact // BID_INEXACT_EXCEPTION;
+                var status = Status.inexact
                 // get remainder
                 remainder_h = Q.w[1] << (64 - amount)
                 
@@ -1316,14 +1337,14 @@ extension Decimal32 {
         }
         // check for possible underflow/overflow
         if UInt32(expon) > DECIMAL_MAX_EXPON_32 {
-            if (expon < 0) {
+            if expon < 0 {
                 // underflow
                 if (expon + MAX_FORMAT_DIGITS_32 < 0) {
                     fpsc.formUnion([.underflow, .inexact])
-                    if (rmode == .halfDown && sgn != 0) {
+                    if (rmode == .down && sgn != 0) {
                         return 0x80000001
                     }
-                    if (rmode == .halfUp && sgn == 0) {
+                    if (rmode == .up && sgn == 0) {
                         return 1
                     }
                     // result is 0
@@ -1350,14 +1371,14 @@ extension Decimal32 {
                 
                 // get coeff*(2^M[extra_digits])/10^extra_digits
                 var Q:UInt128 = UInt128(w: [0,0])
-                __mul_64x64_to_128 (&Q, coeff, bid_reciprocals10_64[extra_digits]);
+                __mul_64x64_to_128 (&Q, coeff, bid_reciprocals10_64[extra_digits])
                 
                 // now get P/10^extra_digits: shift Q_high right by M[extra_digits]-128
-                let amount = bid_short_recip_scale[extra_digits];
+                let amount = bid_short_recip_scale[extra_digits]
                 
                 var _C64 = Q.w[1] >> amount
                 
-                if rmode == .halfEven {   //BID_ROUNDING_TO_NEAREST
+                if rmode == .toNearestOrEven {   //BID_ROUNDING_TO_NEAREST
                     if (_C64 & 1 != 0) {
                         // check whether fractional part of initial_P/10^extra_digits is exactly .5
                         
@@ -1892,7 +1913,7 @@ extension Decimal32 {
             if rounded != 0 {
                 pfpsf.insert(.inexact)
             }
-            return get_BID32(sign_x, add_expon+DECIMAL_EXPONENT_BIAS_32, UInt32(coefficient_x), .halfEven, &pfpsf)
+            return get_BID32(sign_x, add_expon+DECIMAL_EXPONENT_BIAS_32, UInt32(coefficient_x), .toNearestOrEven, &pfpsf)
         }
         
         if c != "e" {
@@ -1937,7 +1958,7 @@ extension Decimal32 {
             if rounded_up != 0 {
                 coefficient_x-=1
             }
-            return get_BID32_UF (sign_x, expon_x, UInt64(coefficient_x), rounded, .halfEven, &pfpsf)
+            return get_BID32_UF (sign_x, expon_x, UInt64(coefficient_x), rounded, .toNearestOrEven, &pfpsf)
         }
         return get_BID32 (sign_x, expon_x, UInt32(coefficient_x), rnd_mode, &pfpsf)
     }

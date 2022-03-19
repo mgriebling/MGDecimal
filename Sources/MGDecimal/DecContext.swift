@@ -8,16 +8,6 @@
 
 import Foundation
 
-public enum Rounding: Codable {
-    case ceiling    /* round towards +infinity         */
-    case floor      /* round towards -infinity         */
-    case down       /* round towards 0 (truncate)      */
-    case up         /* round away from 0               */
-    case halfEven   /* 0.5 rounds to nearest even      */
-    case halfDown   /* 0.5 rounds toward 0             */
-    case halfUp     /* 0.5 rounds away from 0          */
-}
-
 public struct Status: OptionSet, CustomStringConvertible {
     public let rawValue: Int32
     
@@ -97,7 +87,7 @@ public struct DecContext {
     public var statusString: String { status.description }
     
     // access to states
-    public var roundMode: Rounding
+    public var roundMode: FloatingPointRoundingRule
     public var status: Status
     public var minExponent: Int
     public var maxExponent: Int
@@ -106,8 +96,8 @@ public struct DecContext {
     public var digits: Int
     
     init(initKind: ContextInitType) {
-        status = []               // cleared
-        roundMode = .halfEven     // 0.5 rises
+        status = []                  // cleared
+        roundMode = .toNearestOrEven // 0.5 rises
         switch initKind {
             case .base:
                 digits = 9                // 9 digits

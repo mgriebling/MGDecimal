@@ -8,11 +8,12 @@
 import Foundation
 
 // define the BID rounding modes
-let BID_ROUNDING_UP = Rounding.halfUp
-let BID_ROUNDING_DOWN = Rounding.halfDown
-let BID_ROUNDING_TO_ZERO = Rounding.down
-let BID_ROUNDING_TO_NEAREST = Rounding.halfEven
-let BID_ROUNDING_TIES_AWAY = Rounding.up
+public typealias Rounding = FloatingPointRoundingRule
+let BID_ROUNDING_UP = Rounding.up
+let BID_ROUNDING_DOWN = Rounding.down
+let BID_ROUNDING_TO_ZERO = Rounding.towardZero
+let BID_ROUNDING_TO_NEAREST = Rounding.toNearestOrEven
+let BID_ROUNDING_TIES_AWAY = Rounding.toNearestOrAwayFromZero
 
 // Use these for now
 struct UInt512 { var w = [UInt64](repeating: 0, count: 8) }

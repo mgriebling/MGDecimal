@@ -1531,5 +1531,145 @@ extension Decimal32 {
         return get_BID32_UF(sign_a, exponent_b+extra_digits, C64, R, rmode, &pfpsf)
     }
     
+    static func bid32_rem(_ x:UInt32, _ y:UInt32, _ pfpsf: inout Status) -> UInt32 {
+        var sign_x = UInt32(), sign_y = UInt32(), exponent_y = 0, exponent_x = 0
+        var coefficient_y = UInt32(), coefficient_x = UInt32()
+        let valid_y = unpack_BID32 (&sign_y, &exponent_y, &coefficient_y, y)
+        let valid_x = unpack_BID32 (&sign_x, &exponent_x, &coefficient_x, x)
+        
+        // unpack arguments, check for NaN or Infinity
+        if !valid_x {
+            // x is Inf. or NaN or 0
+            if ((y & SNAN_MASK32) == SNAN_MASK32) {   // y is sNaN
+                pfpsf.insert(.invalidOperation)
+            }
+            
+            // test if x is NaN
+            if (x & 0x7c000000) == 0x7c000000 {
+                if (x & SNAN_MASK32) == SNAN_MASK32 {
+                    pfpsf.insert(.invalidOperation)
+                }
+                return coefficient_x & QUIET_MASK32
+            }
+            // x is Infinity?
+            if (x & 0x78000000) == 0x78000000 {
+                if (((y & NAN_MASK32) != NAN_MASK32)) {
+                    pfpsf.insert(.invalidOperation)
+                    // return NaN
+                    return 0x7c000000
+                }
+            }
+            // x is 0
+            // return x if y != 0
+            if (((y & 0x78000000) < 0x78000000) && coefficient_y != 0) {
+                if (y & 0x60000000) == 0x60000000 {
+                    exponent_y = Int(y >> 21) & 0xff;
+                } else {
+                    exponent_y = Int(y >> 23) & 0xff;
+                }
+                
+                if exponent_y < exponent_x {
+                    exponent_x = exponent_y
+                }
+                
+                var x = UInt32(exponent_x)
+                x <<= 23
+                return x | sign_x
+            }
+            
+        }
+        if !valid_y {
+            // y is Inf. or NaN
+            
+            // test if y is NaN
+            if ((y & 0x7c000000) == 0x7c000000) {
+                if (((y & SNAN_MASK32) == SNAN_MASK32)) {
+                    pfpsf.insert(.invalidOperation)
+                }
+                return coefficient_y & QUIET_MASK32
+            }
+            // y is Infinity?
+            if ((y & 0x78000000) == 0x78000000) {
+                return very_fast_get_BID32 (sign_x, exponent_x, coefficient_x)
+            }
+            // y is 0, return NaN
+            pfpsf.insert(.invalidOperation)
+            return 0x7c000000
+        }
+        
+        
+        var diff_expon = exponent_x - exponent_y
+        if diff_expon <= 0 {
+            diff_expon = -diff_expon
+            
+            if (diff_expon > 7) {
+                // |x|<|y| in this case
+                return x
+            }
+            // set exponent of y to exponent_x, scale coefficient_y
+            let T = bid_power10_table_128[diff_expon].w[0];
+            let CYL = UInt64(coefficient_y) * T;
+            if CYL > (UInt64(coefficient_x) << 1) {
+                return x
+            }
+            
+            let CY = UInt32(CYL)
+            let Q = coefficient_x / CY
+            var R = coefficient_x - Q * CY
+            
+            let R2 = R + R;
+            if R2 > CY || (R2 == CY && (Q & 1) != 0) {
+                R = CY - R;
+                sign_x ^= 0x80000000
+            }
+            
+            return very_fast_get_BID32 (sign_x, exponent_x, R)
+        }
+        
+        var CX = UInt64(coefficient_x)
+        var Q64 = UInt64()
+        while diff_expon > 0 {
+            // get number of digits in coeff_x
+            let tempx = Float(CX)
+            let bin_expon = Int((tempx.bitPattern >> 23) & 0xff) - 0x7f
+            let digits_x = Int(bid_estimate_decimal_digits[bin_expon])
+            // will not use this test, dividend will have 18 or 19 digits
+            //if(CX >= bid_power10_table_128[digits_x].w[0])
+            //      digits_x++;
+            
+            var e_scale = Int(18 - digits_x)
+            if (diff_expon >= e_scale) {
+                diff_expon -= e_scale;
+            } else {
+                e_scale = diff_expon;
+                diff_expon = 0;
+            }
+            
+            // scale dividend to 18 or 19 digits
+            CX *= bid_power10_table_128[e_scale].w[0]
+            
+            // quotient
+            Q64 = CX / UInt64(coefficient_y)
+            // remainder
+            CX -= Q64 * UInt64(coefficient_y)
+            
+            // check for remainder == 0
+            if CX == 0 {
+                return very_fast_get_BID32 (sign_x, exponent_y, 0)
+            }
+        }
+        
+        coefficient_x = UInt32(CX)
+        let R2 = coefficient_x + coefficient_x
+        if R2 > coefficient_y || (R2 == coefficient_y && (Q64 & 1) != 0) {
+            coefficient_x = coefficient_y - coefficient_x
+            sign_x ^= 0x80000000
+        }
+        
+        return very_fast_get_BID32 (sign_x, exponent_y, coefficient_x)
+    }
+
+    
+    
 }
 
