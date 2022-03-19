@@ -28,7 +28,7 @@ public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, E
     public static let pi = Decimal32(floatLiteral: Double.pi)
     public static let nan = Decimal32(raw: return_bid32_nan(0, 0, 0))
     public static let quietNaN = Decimal32(raw: return_bid32_nan(0, 0, 0))
-    public static let signalingNaN = Decimal32(floatLiteral: Double.signalingNaN)
+    public static let signalingNaN = Decimal32(raw: SNAN_MASK32)
     public static let infinity = Decimal32(raw: return_bid32_inf(0))
     
     public static var greatestFiniteMagnitude: Decimal32 { Decimal32(raw: return_bid32_max(0)) }
@@ -79,9 +79,7 @@ public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, E
     }
 
     public init(stringLiteral value: String) {
-        var x = Decimal32(raw: 0)
-        Decimal32.bid32_from_string(&x, value, Decimal32.rounding, &Decimal32.state)
-        self = x
+        x = Decimal32.bid32_from_string(value, Decimal32.rounding, &Decimal32.state)
         showState()
     }
     
@@ -96,7 +94,7 @@ public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, E
         var s : (sign: UInt32, exponent: Int, significand: UInt32) = (UInt32(0), 0, UInt32(0))
         self.init()
         if Decimal32.unpack_BID32 (&s.sign, &s.exponent, &s.significand, significand.x) {
-            self = Decimal32.get_BID32(sgn, exponent, s.significand, Decimal32.rounding, &Decimal32.state)
+            x = Decimal32.get_BID32(sgn, exponent, s.significand, Decimal32.rounding, &Decimal32.state)
         }
         showState()
     }
@@ -110,8 +108,7 @@ public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, E
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // MARK: - Custom String Convertible compliance
     public var description: String {
-        var res = ""
-        Decimal32.bid32_to_string(&res, self, Decimal32.rounding, Decimal32.state)
+        let res = Decimal32.bid32_to_string(x)
         showState()
         return res
     }
@@ -126,6 +123,7 @@ public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, E
 extension Decimal32 : AdditiveArithmetic, Comparable, SignedNumeric, Strideable, FloatingPoint {
     
     public mutating func round(_ rule: FloatingPointRoundingRule) {
+        /* TBD */
         switch rule {
             case .toNearestOrEven: break
             case .toNearestOrAwayFromZero: break

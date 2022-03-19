@@ -35,7 +35,6 @@ extension Decimal32 {
                         return coefficient_x
                     } else {
                         // return NaN
-                        // __set_status_flags (pfpsf, BID_INVALID_EXCEPTION);
                         status.insert(.invalidOperation)
                         return NAN_MASK32
                     }
@@ -45,7 +44,6 @@ extension Decimal32 {
                     let res = coefficient_y & QUIET_MASK32
                     if (y & SNAN_MASK32) == SNAN_MASK32 {
                         status.insert(.invalidOperation)
-                        // __set_status_flags (pfpsf, BID_INVALID_EXCEPTION);
                     }
                     return res
                 } else {
@@ -93,19 +91,19 @@ extension Decimal32 {
         var sign_a, coefficient_a, sign_b, coefficient_b: UInt32
         var exponent_a, exponent_b: Int
         if exponent_x < exponent_y {
-            sign_a = sign_y;
-            exponent_a = exponent_y;
-            coefficient_a = coefficient_y;
-            sign_b = sign_x;
-            exponent_b = exponent_x;
-            coefficient_b = coefficient_x;
+            sign_a = sign_y
+            exponent_a = exponent_y
+            coefficient_a = coefficient_y
+            sign_b = sign_x
+            exponent_b = exponent_x
+            coefficient_b = coefficient_x
         } else {
-            sign_a = sign_x;
-            exponent_a = exponent_x;
-            coefficient_a = coefficient_x;
-            sign_b = sign_y;
-            exponent_b = exponent_y;
-            coefficient_b = coefficient_y;
+            sign_a = sign_x
+            exponent_a = exponent_x
+            coefficient_a = coefficient_x
+            sign_b = sign_y
+            exponent_b = exponent_y
+            coefficient_b = coefficient_y
         }
         
         // exponent difference
@@ -123,12 +121,12 @@ extension Decimal32 {
             }
         }
         
-        var sign_ab = (Int64(sign_a ^ sign_b))<<32;
-        sign_ab = Int64(sign_ab) >> 63;
-        let CB = (Int64(coefficient_b) + sign_ab) ^ sign_ab;
+        var sign_ab = (Int64(sign_a ^ sign_b))<<32
+        sign_ab = Int64(sign_ab) >> 63
+        let CB = (Int64(coefficient_b) + sign_ab) ^ sign_ab
         
         let SU = UInt64(coefficient_a) * bid_power10_table_128[diff_dec_expon].w[0]
-        var S = Int64(SU) + CB;
+        var S = Int64(SU) + CB
         
         if S<0 {
             sign_a ^= SIGN_MASK32
@@ -151,15 +149,15 @@ extension Decimal32 {
         }
         
         if n_digits <= MAX_FORMAT_DIGITS_32 {
-            return get_BID32(sign_a, exponent_b, UInt32(P), rmode, &status).x
+            return get_BID32(sign_a, exponent_b, UInt32(P), rmode, &status)
         }
         
-        let extra_digits = n_digits - 7;
+        let extra_digits = n_digits - 7
         
-        var irmode = roundboundIndex(rmode) >> 2
-        if (sign_a != 0 && (irmode - 1) < 2) {
-            irmode = 3 - irmode;
-        }
+        let irmode = roundboundIndex(rmode, sign_a != 0, 0)
+//        if (sign_a != 0 && (irmode - 1) < 2) {
+//            irmode = 3 - irmode;
+//        }
         
         // add a constant to P, depending on rounding mode
         // 0.5*10^(digits_p - 16) for round-to-nearest
@@ -168,39 +166,61 @@ extension Decimal32 {
         __mul_64x64_to_128(&Tmp, P, bid_reciprocals10_64[extra_digits])
         
         // now get P/10^extra_digits: shift Q_high right by M[extra_digits]-64
-        let amount = bid_short_recip_scale[extra_digits];
-        var Q = Tmp.w[1] >> amount;
+        let amount = bid_short_recip_scale[extra_digits]
+        var Q = Tmp.w[1] >> amount
         
         // remainder
-        let R = P - Q * bid_power10_table_128[extra_digits].w[0];
+        let R = P - Q * bid_power10_table_128[extra_digits].w[0]
         if R==bid_round_const_table[irmode][extra_digits] {
             status = []
         } else {
             status.insert(.inexact)
         }
         
-        // __set_status_flags (pfpsf, status);
         if rmode == BID_ROUNDING_TO_NEAREST {
             if R==0 {
                 Q &= 0xffff_fffe
             }
         }
-        
-        return get_BID32(sign_a, exponent_b+extra_digits, UInt32(Q), rmode, &status).x
+        return get_BID32(sign_a, exponent_b+extra_digits, UInt32(Q), rmode, &status)
     }
     
     static let bid_mult_factor : [UInt32] = [
-      1, 10, 100, 1000, 10000, 100000, 1000000
+        1, 10, 100, 1000, 10000, 100000, 1000000
     ]
+    
+    fileprivate static func extractExpSig(_ x: UInt32) -> (exp: Int, sig: UInt32, non_canon: Bool) {
+        if (x & MASK_STEERING_BITS32) == MASK_STEERING_BITS32 {
+            let exp = Int(x & MASK_BINARY_EXPONENT2_32) >> 21
+            let sig = (x & MASK_BINARY_SIG2_32) | MASK_BINARY_OR2_32
+            return (exp, sig, sig > BID32_SIG_MAX)
+        } else {
+            let exp = Int(x & MASK_BINARY_EXPONENT1_32) >> 23
+            let sig = x & MASK_BINARY_SIG1_32
+            return (exp, sig, false)
+        }
+    }
+    
+    fileprivate static func extractExpSig(_ x: UInt32) -> (exp: Int, sig: UInt32) {
+        if (x & MASK_STEERING_BITS32) == MASK_STEERING_BITS32 {
+            let exp = Int(x & MASK_BINARY_EXPONENT2_32) >> 21
+            let sig = (x & MASK_BINARY_SIG2_32) | MASK_BINARY_OR2_32
+            if sig > BID32_SIG_MAX { return (0, 0) }
+            return (exp, sig)
+        } else {
+            let exp = Int(x & MASK_BINARY_EXPONENT1_32) >> 23
+            let sig = x & MASK_BINARY_SIG1_32
+            return (exp, sig)
+        }
+    }
     
     static func equal (_ x: UInt32, _ y: UInt32, _ status: inout Status) -> Bool {
         // NaN (CASE1)
         // if either number is NAN, the comparison is unordered,
         // rather than equal : return 0
-        if (((x & MASK_NAN32) == MASK_NAN32) || ((y & MASK_NAN32) == MASK_NAN32)) {
-            if ((x & MASK_SNAN32) == Decimal32.MASK_SNAN32 || (y & MASK_SNAN32) == MASK_SNAN32) {
-                status.insert(.invalidOperation)
-                // *pfpsf |= BID_INVALID_EXCEPTION;    // set exception if sNaN
+        if ((x & MASK_NAN32) == MASK_NAN32) || ((y & MASK_NAN32) == MASK_NAN32) {
+            if (x & MASK_SNAN32) == Decimal32.MASK_SNAN32 || (y & MASK_SNAN32) == MASK_SNAN32 {
+                status.insert(.invalidOperation)  // set exception if sNaN
             }
             return false
         }
@@ -209,46 +229,32 @@ extension Decimal32 {
         if x == y {
             return true
         }
+        
         // INFINITY (CASE3)
-        if (((x & MASK_INF32) == MASK_INF32) && ((y & MASK_INF32) == MASK_INF32)) {
-            return (((x ^ y) & Decimal32.MASK_SIGN32) != Decimal32.MASK_SIGN32)
+        if ((x & MASK_INF32) == MASK_INF32) && ((y & MASK_INF32) == MASK_INF32) {
+            return ((x ^ y) & Decimal32.MASK_SIGN32) != Decimal32.MASK_SIGN32
         }
         // ONE INFINITY (CASE3')
-        if (((x & MASK_INF32) == MASK_INF32) || ((y & MASK_INF32) == MASK_INF32)) {
+        if ((x & MASK_INF32) == MASK_INF32) || ((y & MASK_INF32) == MASK_INF32) {
             return false
         }
+        
         // if steering bits are 11 (condition will be 0), then exponent is G[0:w+1] =>
-        var exp_x, sig_x:UInt32
-        var non_canon_x:Bool
-        if ((x & MASK_STEERING_BITS32) == MASK_STEERING_BITS32) {
-            exp_x = (x & MASK_BINARY_EXPONENT2_32) >> 21;
-            sig_x = (x & MASK_BINARY_SIG2_32) | MASK_BINARY_OR2_32;
-            if (sig_x > BID32_SIG_MAX) {
-                non_canon_x = true
-            } else {
-                non_canon_x = false
-            }
-        } else {
-            exp_x = (x & MASK_BINARY_EXPONENT1_32) >> 23;
-            sig_x = (x & MASK_BINARY_SIG1_32);
-            non_canon_x = false
-        }
+        //var exp_x, sig_x: UInt32; var non_canon_x: Bool
+        var (exp_x, sig_x, non_canon_x) = extractExpSig(x)
+        
         // if steering bits are 11 (condition will be 0), then exponent is G[0:w+1] =>
-        var exp_y, sig_y:UInt32
-        var non_canon_y:Bool
-        if ((y & MASK_STEERING_BITS32) == MASK_STEERING_BITS32) {
-            exp_y = (y & MASK_BINARY_EXPONENT2_32) >> 21;
-            sig_y = (y & MASK_BINARY_SIG2_32) | MASK_BINARY_OR2_32;
-            if (sig_y > BID32_SIG_MAX) {
-                non_canon_y = true
-            } else {
-                non_canon_y = false
-            }
-        } else {
-            exp_y = (y & Decimal32.MASK_BINARY_EXPONENT1_32) >> 23;
-            sig_y = (y & Decimal32.MASK_BINARY_SIG1_32);
-            non_canon_y = false
-        }
+        var (exp_y, sig_y, non_canon_y) =  extractExpSig(y)
+//        if (y & MASK_STEERING_BITS32) == MASK_STEERING_BITS32 {
+//            exp_y = (y & MASK_BINARY_EXPONENT2_32) >> 21
+//            sig_y = (y & MASK_BINARY_SIG2_32) | MASK_BINARY_OR2_32
+//            non_canon_y = sig_y > BID32_SIG_MAX
+//        } else {
+//            exp_y = (y & Decimal32.MASK_BINARY_EXPONENT1_32) >> 23
+//            sig_y = (y & Decimal32.MASK_BINARY_SIG1_32)
+//            non_canon_y = false
+//        }
+        
         // ZERO (CASE4)
         // some properties:
         // (+ZERO==-ZERO) => therefore ignore the sign
@@ -256,15 +262,15 @@ extension Decimal32 {
         //    therefore ignore the exponent field
         //    (Any non-canonical # is considered 0)
         var x_is_zero = false, y_is_zero = false
-        if (non_canon_x || sig_x == 0) {
+        if non_canon_x || sig_x == 0 {
             x_is_zero = true
         }
-        if (non_canon_y || sig_y == 0) {
+        if non_canon_y || sig_y == 0 {
             y_is_zero = true
         }
-        if (x_is_zero && y_is_zero) {
+        if x_is_zero && y_is_zero {
             return true
-        } else if ((x_is_zero && !y_is_zero) || (!x_is_zero && y_is_zero)) {
+        } else if (x_is_zero && !y_is_zero) || (!x_is_zero && y_is_zero) {
             return false
         }
         // OPPOSITE SIGN (CASE5)
@@ -273,11 +279,10 @@ extension Decimal32 {
             return false
         }
         // REDUNDANT REPRESENTATIONS (CASE6)
-        if (exp_x > exp_y) {    // to simplify the loop below,
-            swap(&exp_x, &exp_y)
-            swap(&sig_x, &sig_y)
-//            SWAP (exp_x, exp_y, exp_t);    // put the larger exp in y,
-//            SWAP (sig_x, sig_y, sig_t);    // and the smaller exp in x
+        if exp_x > exp_y {
+            // to simplify the loop below,
+            swap(&exp_x, &exp_y)  // put the larger exp in y,
+            swap(&sig_x, &sig_y)  // and the smaller exp in x
         }
         if exp_y - exp_x > 6 {
             return false    // difference cannot be greater than 10^6
@@ -297,10 +302,11 @@ extension Decimal32 {
         // NaN (CASE1)
         // if either number is NAN, the comparison is unordered : return 0
         if (x & NAN_MASK32) == NAN_MASK32 || (y & NAN_MASK32) == NAN_MASK32 {
-            // *pfpsf |= BID_INVALID_EXCEPTION;    // set invalid exception if NaN
+            // set invalid exception if NaN
             status.insert(.invalidOperation)
             return false
         }
+        
         // SIMPLE (CASE2)
         // if all the bits are the same, these numbers are equal.
         if x == y { return false }
@@ -322,37 +328,39 @@ extension Decimal32 {
             return (y & SIGN_MASK32) != SIGN_MASK32
         }
         // if steering bits are 11 (condition will be 0), then exponent is G[0:w+1] =>
-        var exp_x, exp_y: Int
-        var sig_x, sig_y: UInt32
-        var non_canon_x, non_canon_y: Bool
-        if (x & SPECIAL_ENCODING_MASK32) == SPECIAL_ENCODING_MASK32 {
-            exp_x = Int((x & MASK_BINARY_EXPONENT2_32) >> 21)
-            sig_x = (x & SMALL_COEFF_MASK32) | LARGE_COEFF_HIGH_BIT32
-            if sig_x > BID32_SIG_MAX {
-                non_canon_x = true
-            } else {
-                non_canon_x = false
-            }
-        } else {
-            exp_x = Int((x & MASK_BINARY_EXPONENT1_32) >> 23)
-            sig_x = x & LARGE_COEFF_MASK32
-            non_canon_x = false
-        }
+//        var exp_x, exp_y: Int
+//        var sig_x, sig_y: UInt32
+//        var non_canon_x, non_canon_y: Bool
+        let (exp_x, sig_x, non_canon_x) = extractExpSig(x)
+//        if (x & SPECIAL_ENCODING_MASK32) == SPECIAL_ENCODING_MASK32 {
+//            exp_x = Int((x & MASK_BINARY_EXPONENT2_32) >> 21)
+//            sig_x = (x & SMALL_COEFF_MASK32) | LARGE_COEFF_HIGH_BIT32
+//            if sig_x > BID32_SIG_MAX {
+//                non_canon_x = true
+//            } else {
+//                non_canon_x = false
+//            }
+//        } else {
+//            exp_x = Int((x & MASK_BINARY_EXPONENT1_32) >> 23)
+//            sig_x = x & LARGE_COEFF_MASK32
+//            non_canon_x = false
+//        }
         
         // if steering bits are 11 (condition will be 0), then exponent is G[0:w+1] =>
-        if (y & SPECIAL_ENCODING_MASK32) == SPECIAL_ENCODING_MASK32 {
-            exp_y = Int((y & MASK_BINARY_EXPONENT2_32) >> 21)
-            sig_y = (y & SMALL_COEFF_MASK32) | LARGE_COEFF_HIGH_BIT32
-            if sig_y > BID32_SIG_MAX {
-                non_canon_y = true
-            } else {
-                non_canon_y = false
-            }
-        } else {
-            exp_y = Int((y & MASK_BINARY_EXPONENT1_32) >> 23)
-            sig_y = y & LARGE_COEFF_MASK32
-            non_canon_y = false
-        }
+        let (exp_y, sig_y, non_canon_y) = extractExpSig(y)
+//        if (y & SPECIAL_ENCODING_MASK32) == SPECIAL_ENCODING_MASK32 {
+//            exp_y = Int((y & MASK_BINARY_EXPONENT2_32) >> 21)
+//            sig_y = (y & SMALL_COEFF_MASK32) | LARGE_COEFF_HIGH_BIT32
+//            if sig_y > BID32_SIG_MAX {
+//                non_canon_y = true
+//            } else {
+//                non_canon_y = false
+//            }
+//        } else {
+//            exp_y = Int((y & MASK_BINARY_EXPONENT1_32) >> 23)
+//            sig_y = y & LARGE_COEFF_MASK32
+//            non_canon_y = false
+//        }
         
         // ZERO (CASE4)
         // some properties:
@@ -439,16 +447,16 @@ extension Decimal32 {
         // check for NaNs and infinities
         if (x & MASK_NAN32) == MASK_NAN32 { // check for NaN
             if (x & 0x000fffff) > 999999 {
-                x = x & 0xfe000000 // clear G6-G10 and the payload bits
+                x = x & 0xfe00_0000 // clear G6-G10 and the payload bits
             } else {
-                x = x & 0xfe0fffff // clear G6-G10
+                x = x & 0xfe0f_ffff // clear G6-G10
             }
             if (x & MASK_SNAN32) == MASK_SNAN32 { // SNaN
                 // set invalid flag
                 pfpsf.insert(.invalidOperation)
                 // pfpsf |= BID_INVALID_EXCEPTION;
                 // return quiet (SNaN)
-                res = x & 0xfdffffff
+                res = x & 0xfdff_ffff
             } else {    // QNaN
                 res = x
             }
@@ -457,25 +465,26 @@ extension Decimal32 {
             if (x & MASK_SIGN32) == 0 { // x is +inf
                 res = INFINITY_MASK32
             } else { // x is -inf
-                res = 0xf7f8967f    // -MAXFP = -9999999 * 10^emax
+                res = 0xf7f8_967f    // -MAXFP = -9999999 * 10^emax
             }
             return res
         }
         // unpack the argument
         let x_sign = x & MASK_SIGN32 // 0 for positive, MASK_SIGN32 for negative
-        var x_exp, C1:UInt32
+        // var x_exp, C1:UInt32
         // if steering bits are 11 (condition will be 0), then exponent is G[0:7]
-        if (x & MASK_STEERING_BITS32) == MASK_STEERING_BITS32 {
-            x_exp = (x & MASK_BINARY_EXPONENT2_32) >> 21 // biased
-            C1 = (x & MASK_BINARY_SIG2_32) | MASK_BINARY_OR2_32
-            if C1 > BID32_SIG_MAX {    // non-canonical
-                x_exp = 0
-                C1 = 0
-            }
-        } else {
-            x_exp = (x & MASK_BINARY_EXPONENT1_32) >> 23 // biased
-            C1 = x & MASK_BINARY_SIG1_32
-        }
+        var (x_exp, C1) = extractExpSig(x)
+//        if (x & MASK_STEERING_BITS32) == MASK_STEERING_BITS32 {
+//            x_exp = (x & MASK_BINARY_EXPONENT2_32) >> 21 // biased
+//            C1 = (x & MASK_BINARY_SIG2_32) | MASK_BINARY_OR2_32
+//            if C1 > BID32_SIG_MAX {    // non-canonical
+//                x_exp = 0
+//                C1 = 0
+//            }
+//        } else {
+//            x_exp = (x & MASK_BINARY_EXPONENT1_32) >> 23 // biased
+//            C1 = x & MASK_BINARY_SIG1_32
+//        }
         
         // check for zeros (possibly from non-canonical values)
         if C1 == 0 {
@@ -488,22 +497,14 @@ extension Decimal32 {
             } else if x == 0x80000001 {
                 // x = -MINFP = 1...99 * 10^emin
                 res = MASK_SIGN32 // -0
-            } else {    // -MAXFP <= x <= -MINFP - 1 ulp OR MINFP <= x <= MAXFP - 1 ulp
+            } else { // -MAXFP <= x <= -MINFP - 1 ulp OR MINFP <= x <= MAXFP - 1 ulp
                 // can add/subtract 1 ulp to the significand
                 
                 // Note: we could check here if x >= 10^7 to speed up the case q1 = 7
                 // q1 = nr. of decimal digits in x (1 <= q1 <= 7)
                 //  determine first the nr. of bits in x
                 let q1 = digitsIn(C1)
-//                let tmp1 = Float(C1) // exact conversion
-//                let x_nr_bits = 1 + Int((tmp1.bitPattern >> 23) & 0xff) - 0x7f
-//                var q1 = Int(bid_nr_digits[x_nr_bits - 1].digits)
-//                if q1 == 0 {
-//                    q1 = Int( bid_nr_digits[x_nr_bits - 1].digits1)
-//                    if (C1 >= bid_nr_digits[x_nr_bits - 1].threshold_lo) {
-//                        q1+=1
-//                    }
-//                }
+
                 // if q1 < P7 then pad the significand with zeros
                 if q1 < P7 {
                     let ind:Int
@@ -512,35 +513,35 @@ extension Decimal32 {
                         // pad with P7 - q1 zeros, until exponent = emin
                         // C1 = C1 * 10^ind
                         C1 = C1 * UInt32(bid_ten2k64[ind])
-                        x_exp = x_exp - UInt32(ind)
+                        x_exp = x_exp - ind
                     } else { // pad with zeros until the exponent reaches emin
-                        ind = Int(x_exp)
+                        ind = x_exp
                         C1 = C1 * UInt32(bid_ten2k64[ind])
-                        x_exp = UInt32(EXP_MIN32)
+                        x_exp = EXP_MIN32
                     }
                 }
                 if x_sign == 0 {    // x > 0
                     // add 1 ulp (add 1 to the significand)
-                    C1+=1
-                    if C1 == 0x989680 { // if  C1 = 10^7
-                        C1 = 0x0f4240 // C1 = 10^6
-                        x_exp+=1
+                    C1 += 1
+                    if C1 == 10_000_000 { // if  C1 = 10^7
+                        C1 = 1_000_000 // C1 = 10^6
+                        x_exp += 1
                     }
                     // Ok, because MAXFP = 9999999 * 10^emax was caught already
                 } else {    // x < 0
                     // subtract 1 ulp (subtract 1 from the significand)
-                    C1-=1
-                    if C1 == 0x0f423f && x_exp != 0 { // if  C1 = 10^6 - 1
+                    C1 -= 1
+                    if C1 == 999_999 && x_exp != 0 { // if  C1 = 10^6 - 1
                         C1 = UInt32(BID32_SIG_MAX) // C1 = 10^7 - 1
-                        x_exp-=1
+                        x_exp -= 1
                     }
                 }
                 // assemble the result
                 // if significand has 24 bits
                 if (C1 & MASK_BINARY_OR2_32) != 0 {
-                    res = x_sign | (x_exp << 21) | MASK_STEERING_BITS32 | (C1 & MASK_BINARY_SIG2_32)
+                    res = x_sign | UInt32(x_exp << 21) | MASK_STEERING_BITS32 | (C1 & MASK_BINARY_SIG2_32)
                 } else {    // significand fits in 23 bits
-                    res = x_sign | (x_exp << 23) | C1;
+                    res = x_sign | UInt32(x_exp << 23) | C1
                 }
             } // end -MAXFP <= x <= -MINFP - 1 ulp OR MINFP <= x <= MAXFP - 1 ulp
         } // end x is not special and is not zero
@@ -551,15 +552,14 @@ extension Decimal32 {
     static func mul (_ x:UInt32, _ y:UInt32, _ rmode:Rounding, _ status:inout Status) -> UInt32  {
         var sign_x = UInt32(0), sign_y = UInt32(0), exponent_x = 0, exponent_y = 0
         var coefficient_x = UInt32(0), coefficient_y = UInt32(0)
-        let valid_x = unpack_BID32 (&sign_x, &exponent_x, &coefficient_x, x);
-        let valid_y = unpack_BID32 (&sign_y, &exponent_y, &coefficient_y, y);
+        let valid_x = unpack_BID32 (&sign_x, &exponent_x, &coefficient_x, x)
+        let valid_y = unpack_BID32 (&sign_y, &exponent_y, &coefficient_y, y)
         
         // unpack arguments, check for NaN or Infinity
-        if (!valid_x) {
-            
-            if (y & SNAN_MASK32) == SNAN_MASK32 {   // y is sNaN
+        if !valid_x {
+            if (y & SNAN_MASK32) == SNAN_MASK32 {
+                // y is sNaN
                 status.insert(.invalidOperation)
-               //  __set_status_flags (pfpsf, BID_INVALID_EXCEPTION);
             }
             // x is Inf. or NaN
             
@@ -574,49 +574,49 @@ extension Decimal32 {
             // x is Infinity?
             if (x & INFINITY_MASK32) == INFINITY_MASK32 {
                 // check if y is 0
-                if ((y & INFINITY_MASK32) != INFINITY_MASK32 && (coefficient_y == 0)) {
+                if (y & INFINITY_MASK32) != INFINITY_MASK32 && (coefficient_y == 0) {
                     status.insert(.invalidOperation)
                     // y==0 , return NaN
-                    return (NAN_MASK32);
+                    return NAN_MASK32
                 }
                 // check if y is NaN
-                if ((y & NAN_MASK32) == NAN_MASK32) {
+                if (y & NAN_MASK32) == NAN_MASK32 {
                     // y==NaN , return NaN
-                   return (coefficient_y & QUIET_MASK32);
+                   return coefficient_y & QUIET_MASK32
                 }
                 // otherwise return +/-Inf
-                return (((x ^ y) & SIGN_MASK32) | INFINITY_MASK32);
+                return ((x ^ y) & SIGN_MASK32) | INFINITY_MASK32
             }
             // x is 0
             if (y & INFINITY_MASK32) != INFINITY_MASK32 {
                 if (y & SPECIAL_ENCODING_MASK32) == SPECIAL_ENCODING_MASK32 {
-                    exponent_y = Int(UInt32(y >> 21)) & 0xff;
+                    exponent_y = Int(UInt32(y >> 21)) & 0xff
                 } else {
-                    exponent_y = Int(UInt32(y >> 23)) & 0xff;
+                    exponent_y = Int(UInt32(y >> 23)) & 0xff
                 }
                 sign_y = y & SIGN_MASK32
                 
-                exponent_x += exponent_y - DECIMAL_EXPONENT_BIAS_32;
+                exponent_x += exponent_y - DECIMAL_EXPONENT_BIAS_32
                 if (exponent_x > DECIMAL_MAX_EXPON_32) {
-                    exponent_x = DECIMAL_MAX_EXPON_32;
+                    exponent_x = DECIMAL_MAX_EXPON_32
                 } else if (exponent_x < 0) {
-                    exponent_x = 0;
+                    exponent_x = 0
                 }
                return UInt32(UInt64(sign_x ^ sign_y) | (UInt64(exponent_x) << 23))
             }
         }
         if !valid_y {
             // y is Inf. or NaN
-            
             // test if y is NaN
-            if ((y & NAN_MASK32) == NAN_MASK32) {
-                if ((y & SNAN_MASK32) == SNAN_MASK32) {    // sNaN
+            if (y & NAN_MASK32) == NAN_MASK32 {
+                if (y & SNAN_MASK32) == SNAN_MASK32 {
+                    // sNaN
                     status.insert(.invalidOperation)
                 }
-                return (coefficient_y & QUIET_MASK32);
+                return coefficient_y & QUIET_MASK32
             }
             // y is Infinity?
-            if ((y & INFINITY_MASK32) == INFINITY_MASK32) {
+            if (y & INFINITY_MASK32) == INFINITY_MASK32 {
                 // check if x is 0
                 if coefficient_x == 0 {
                     status.insert(.invalidOperation)
@@ -624,14 +624,14 @@ extension Decimal32 {
                     return (NAN_MASK32);
                 }
                 // otherwise return +/-Inf
-                return (((x ^ y) & SIGN_MASK32) | INFINITY_MASK32);
+                return ((x ^ y) & SIGN_MASK32) | INFINITY_MASK32
             }
             // y is 0
-            exponent_x += exponent_y - DECIMAL_EXPONENT_BIAS_32;
-            if (exponent_x > DECIMAL_MAX_EXPON_32) {
-                exponent_x = DECIMAL_MAX_EXPON_32;
-            } else if (exponent_x < 0) {
-                exponent_x = 0;
+            exponent_x += exponent_y - DECIMAL_EXPONENT_BIAS_32
+            if exponent_x > DECIMAL_MAX_EXPON_32 {
+                exponent_x = DECIMAL_MAX_EXPON_32
+            } else if exponent_x < 0 {
+                exponent_x = 0
             }
             return UInt32(UInt64(sign_x ^ sign_y) | (UInt64(exponent_x) << 23))
         }
@@ -654,15 +654,15 @@ extension Decimal32 {
         exponent_x += extra_digits
         
         if extra_digits == 0 {
-            return get_BID32 (sign_x ^ sign_y, exponent_x, UInt32(P), rmode, &status).x
+            return get_BID32 (sign_x ^ sign_y, exponent_x, UInt32(P), rmode, &status)
         }
         
-        var rmode1 = roundboundIndex(rmode) >> 2
-        if (sign_x ^ sign_y) != 0 && UInt32(rmode1 - 1) < 2 {
-            rmode1 = 3 - rmode1
-        }
+        var rmode1 = roundboundIndex(rmode, (sign_x^sign_y) != 0, 0)
+//        if (sign_x ^ sign_y) != 0 && UInt32(rmode1 - 1) < 2 {
+//            rmode1 = 3 - rmode1
+//        }
         
-        if exponent_x<0 { rmode1=3 }  // RZ
+        if exponent_x < 0 { rmode1 = 3 }  // RZ
         
         // add a constant to P, depending on rounding mode
         // 0.5*10^(digits_p - 16) for round-to-nearest
@@ -687,22 +687,22 @@ extension Decimal32 {
         
         if rmode1 == 0 {    //BID_ROUNDING_TO_NEAREST
             if R==0 {
-                Q &= 0xfffffffe
+                Q &= 0xffff_fffe
             }
         }
         
         if (exponent_x == -1) && (Q == BID32_SIG_MAX) && (rmode != BID_ROUNDING_TO_ZERO) {
-            rmode1 = roundboundIndex(rmode) >> 2
-            if ((sign_x^sign_y != 0) && UInt32(rmode1 - 1) < 2) {
-                rmode1 = 3 - rmode1
-            }
+            rmode1 = roundboundIndex(rmode, (sign_x^sign_y) != 0, 0)
+//            if ((sign_x^sign_y != 0) && UInt32(rmode1 - 1) < 2) {
+//                rmode1 = 3 - rmode1
+//            }
             
-            if (((R != 0) && (rmode == BID_ROUNDING_UP)) || ((!(rmode1&3 != 0)) && (R+R>=bid_power10_table_128[extra_digits].w[0]))) {
+            if ((R != 0) && (rmode == BID_ROUNDING_UP)) || ((rmode1&3 == 0) && (R+R>=bid_power10_table_128[extra_digits].w[0])) {
                 return very_fast_get_BID32(sign_x^sign_y, 0, 1000000)
             }
         }
         
-        return get_BID32_UF (sign_x^sign_y, Int(exponent_x), Q, Int(R), rmode, &status).x
+        return get_BID32_UF (sign_x^sign_y, Int(exponent_x), Q, Int(R), rmode, &status)
     }
     
     /*****************************************************************************
@@ -741,108 +741,106 @@ extension Decimal32 {
         //      BID_OPT_SAVE_BINARY_FLAGS()
         var sign_x = UInt32(0), sign_y = UInt32(0), exponent_x = 0, exponent_y = 0
         var coefficient_x = UInt32(0), coefficient_y = UInt32(0)
-        let valid_x = unpack_BID32 (&sign_x, &exponent_x, &coefficient_x, x);
-        let valid_y = unpack_BID32 (&sign_y, &exponent_y, &coefficient_y, y);
+        let valid_x = unpack_BID32 (&sign_x, &exponent_x, &coefficient_x, x)
+        let valid_y = unpack_BID32 (&sign_y, &exponent_y, &coefficient_y, y)
         
         // unpack arguments, check for NaN or Infinity
         if !valid_x {
             // x is Inf. or NaN
-            if ((y & SNAN_MASK32) == SNAN_MASK32) {   // y is sNaN
+            if (y & SNAN_MASK32) == SNAN_MASK32 {   // y is sNaN
                 status.insert(.invalidOperation)
                 //__set_status_flags (pfpsf, BID_INVALID_EXCEPTION);
             }
             
             // test if x is NaN
-            if ((x & NAN_MASK32) == NAN_MASK32) {
-                if ((x & SNAN_MASK32) == SNAN_MASK32) {    // sNaN
+            if (x & NAN_MASK32) == NAN_MASK32 {
+                if (x & SNAN_MASK32) == SNAN_MASK32 {    // sNaN
                     status.insert(.invalidOperation)
                 }
-                return (coefficient_x & QUIET_MASK32);
+                return coefficient_x & QUIET_MASK32
             }
             // x is Infinity?
-            if ((x & INFINITY_MASK32) == INFINITY_MASK32) {
+            if (x & INFINITY_MASK32) == INFINITY_MASK32 {
                 // check if y is Inf or NaN
-                if ((y & INFINITY_MASK32) == INFINITY_MASK32) {
+                if (y & INFINITY_MASK32) == INFINITY_MASK32 {
                     // y==Inf, return NaN
-                    if ((y & NAN_MASK32) == INFINITY_MASK32) {    // Inf/Inf
+                    if (y & NAN_MASK32) == INFINITY_MASK32 {    // Inf/Inf
                         status.insert(.invalidOperation)
-                        return (NAN_MASK32);
+                        return NAN_MASK32
                     }
                 } else {
                     // otherwise return +/-Inf
-                    return (((x ^ y) & SIGN_MASK32) | INFINITY_MASK32);
+                    return ((x ^ y) & SIGN_MASK32) | INFINITY_MASK32
                 }
             }
             // x==0
             if ((y & INFINITY_MASK32) != INFINITY_MASK32) && coefficient_y == 0 {
                 // y==0 , return NaN
                 status.insert(.invalidOperation)
-                return (NAN_MASK32);
+                return NAN_MASK32
             }
-            if (((y & INFINITY_MASK32) != INFINITY_MASK32)) {
-                if ((y & SPECIAL_ENCODING_MASK32) == SPECIAL_ENCODING_MASK32) {
+            if (y & INFINITY_MASK32) != INFINITY_MASK32 {
+                if (y & SPECIAL_ENCODING_MASK32) == SPECIAL_ENCODING_MASK32 {
                     exponent_y = Int((UInt32(y >> 21)) & 0xff)
                 } else {
                     exponent_y = Int((UInt32(y >> 23)) & 0xff)
                     sign_y = y & SIGN_MASK32
                 }
                 
-                exponent_x = exponent_x - exponent_y + DECIMAL_EXPONENT_BIAS_32;
-                if (exponent_x > DECIMAL_MAX_EXPON_32) {
-                    exponent_x = DECIMAL_MAX_EXPON_32;
-                } else if (exponent_x < 0) {
-                    exponent_x = 0;
+                exponent_x = exponent_x - exponent_y + DECIMAL_EXPONENT_BIAS_32
+                if exponent_x > DECIMAL_MAX_EXPON_32 {
+                    exponent_x = DECIMAL_MAX_EXPON_32
+                } else if exponent_x < 0 {
+                    exponent_x = 0
                 }
-                return UInt32((sign_x ^ sign_y) | (UInt32(exponent_x) << 23))
+                return UInt32(sign_x ^ sign_y) | UInt32(exponent_x) << 23
             }
             
         }
         if !valid_y {
             // y is Inf. or NaN
-            
             // test if y is NaN
-            if ((y & NAN_MASK32) == NAN_MASK32) {
-                if ((y & SNAN_MASK32) == SNAN_MASK32) {   // sNaN
+            if (y & NAN_MASK32) == NAN_MASK32 {
+                if (y & SNAN_MASK32) == SNAN_MASK32 {
+                    // sNaN
                     status.insert(.invalidOperation)
                 }
-                return (coefficient_y & QUIET_MASK32)
+                return coefficient_y & QUIET_MASK32
             }
+            
             // y is Infinity?
             if (y & INFINITY_MASK32) == INFINITY_MASK32 {
                 // return +/-0
                 return (x ^ y) & SIGN_MASK32
             }
+            
             // y is 0
             status.insert(.divisionByZero)
-            //__set_status_flags (pfpsf, BID_ZERO_DIVIDE_EXCEPTION);
-            return ((sign_x ^ sign_y) | INFINITY_MASK32);
+            return ((sign_x ^ sign_y) | INFINITY_MASK32)
         }
-        var diff_expon = exponent_x - exponent_y + DECIMAL_EXPONENT_BIAS_32;
+        var diff_expon = exponent_x - exponent_y + DECIMAL_EXPONENT_BIAS_32
         
         var A, B, Q, R: UInt32
         var CA: UInt64
         var ed1, ed2: Int
-        if (coefficient_x < coefficient_y) {
-            
+        if coefficient_x < coefficient_y {
             // get number of decimal digits for c_x, c_y
-            
             //--- get number of bits in the coefficients of x and y ---
             let tempx = Float(coefficient_x)
             let tempy = Float(coefficient_y)
             let bin_index = Int((tempy.bitPattern - tempx.bitPattern) >> 23)
-            
             A = coefficient_x * UInt32(bid_power10_index_binexp[bin_index])
-            B = coefficient_y;
+            B = coefficient_y
             
             // compare A, B
-            let DU = (A - B) >> 31;
+            let DU = (A - B) >> 31
             ed1 = 6 + Int(DU)
             ed2 = Int(bid_estimate_decimal_digits[bin_index]) + ed1
             let T = bid_power10_table_128[ed1].w[0]
             CA = UInt64(A) * T
             
             Q = 0
-            diff_expon = diff_expon - ed2;
+            diff_expon = diff_expon - ed2
             
         } else {
             // get c_x/c_y
@@ -852,11 +850,11 @@ extension Decimal32 {
             
             // will use to get number of dec. digits of Q
             let tempq = Float(Q)
-            let bin_expon_cx = Int(tempq.bitPattern >> 23) - 0x7f;
+            let bin_expon_cx = Int(tempq.bitPattern >> 23) - 0x7f
             
             // exact result ?
             if R == 0 {
-                return get_BID32 (sign_x ^ sign_y, diff_expon, Q, rmode, &status).x
+                return get_BID32 (sign_x ^ sign_y, diff_expon, Q, rmode, &status)
             }
             // get decimal digits of Q
             var DU = UInt32(bid_power10_index_binexp[bin_expon_cx]) - Q - 1;
@@ -864,38 +862,35 @@ extension Decimal32 {
             
             ed2 = 7 - Int(bid_estimate_decimal_digits[bin_expon_cx]) - Int(DU)
             
-            let T = bid_power10_table_128[ed2].w[0];
+            let T = bid_power10_table_128[ed2].w[0]
             CA = UInt64(R) * T
-            B = coefficient_y;
+            B = coefficient_y
             
             Q *= UInt32(bid_power10_table_128[ed2].w[0])
             diff_expon -= ed2
         }
         
         let Q2 = UInt32(CA / UInt64(B))
-        let B2 = B + B;
-        let B4 = B2 + B2;
+        let B2 = B + B
+        let B4 = B2 + B2
         R = UInt32(CA - UInt64(Q2) * UInt64(B))
         Q += Q2
         
         if R != 0 {
             // set status flags
             status.insert(.inexact)
-            //__set_status_flags (pfpsf, BID_INEXACT_EXCEPTION);
-            //printf("ZZZ R=%x, %x %x\n",R, (BID_UINT32)pfpsf, *pfpsf);
         } else {
             // eliminate trailing zeros
-            
             // check whether CX, CY are short
-            if ((coefficient_x <= 1024) && (coefficient_y <= 1024)) {
+            if (coefficient_x <= 1024) && (coefficient_y <= 1024) {
                 let i = Int(coefficient_y) - 1;
                 let j = Int(coefficient_x) - 1;
                 // difference in powers of 2 bid_factors for Y and X
                 var nzeros = ed2 - Int(bid_factors[i][0] + bid_factors[j][0])
                 // difference in powers of 5 bid_factors
                 let d5 = ed2 - Int(bid_factors[i][1] + bid_factors[j][1])
-                if (d5 < nzeros) {
-                    nzeros = d5;
+                if d5 < nzeros {
+                    nzeros = d5
                 }
                 
                 if nzeros != 0 {
@@ -906,7 +901,7 @@ extension Decimal32 {
                     let amount = bid_bid_bid_recip_scale32[nzeros];
                     Q = UInt32(CT >> amount)
                     
-                    diff_expon += nzeros;
+                    diff_expon += nzeros
                 }
             } else {
                 var nzeros = 0
@@ -914,12 +909,12 @@ extension Decimal32 {
                 // decompose digit
                 let PD = UInt64(Q) * 0x068DB8BB
                 var digit_h = UInt32(PD >> 40)
-                let digit_low = Q - digit_h * 10000;
+                let digit_low = Q - digit_h * 10000
                 
                 if digit_low == 0 {
                     nzeros += 4
                 } else {
-                    digit_h = digit_low;
+                    digit_h = digit_low
                 }
                 
                 if (digit_h & 1) == 0 {
@@ -934,19 +929,19 @@ extension Decimal32 {
                     let amount = bid_bid_bid_recip_scale32[nzeros];
                     Q = UInt32(CT >> amount);
                 }
-                diff_expon += nzeros;
+                diff_expon += nzeros
                 
             }
-            if (diff_expon >= 0) {
-                return get_BID32 (sign_x ^ sign_y, diff_expon, Q, rmode, &status).x
+            if diff_expon >= 0 {
+                return get_BID32 (sign_x ^ sign_y, diff_expon, Q, rmode, &status)
             }
         }
         
-        if (diff_expon >= 0) {
-            var rmode1 = roundboundIndex(rmode) >> 2
-            if (sign_x ^ sign_y) != 0 && UInt32(rmode1 - 1) < 2 {
-                rmode1 = 3 - rmode1
-            }
+        if diff_expon >= 0 {
+            let rmode1 = roundboundIndex(rmode, (sign_x ^ sign_y) != 0, 0)
+//            if (sign_x ^ sign_y) != 0 && UInt32(rmode1 - 1) < 2 {
+//                rmode1 = 3 - rmode1
+//            }
             switch rmode1 {
                 case 0, 4:
                     // R*10
@@ -959,13 +954,13 @@ extension Decimal32 {
                     R -= ((Q | UInt32(rmode1 >> 2)) & 1)
                     // R<0 ?
                     let D = UInt32(R) >> 31
-                    Q += D;
+                    Q += D
                 case 1, 3:
                     break
                 default:    // rounding up
                     Q+=1
             }
-            return get_BID32 (sign_x ^ sign_y, diff_expon, Q, rmode, &status).x
+            return get_BID32 (sign_x ^ sign_y, diff_expon, Q, rmode, &status)
         } else {
             // UF occurs
             if diff_expon + 7 < 0 {
@@ -973,7 +968,7 @@ extension Decimal32 {
                 status.insert(.inexact)
             }
             //rmode = rnd_mode;
-            return get_BID32_UF (sign_x ^ sign_y, diff_expon, UInt64(Q), Int(R), rmode, &status).x
+            return get_BID32_UF (sign_x ^ sign_y, diff_expon, UInt64(Q), Int(R), rmode, &status)
         }
     }
 
@@ -983,21 +978,21 @@ extension Decimal32 {
         var sign_x = UInt32(0), exponent_x = 0, coefficient_x = UInt32(0)
         if !unpack_BID32 (&sign_x, &exponent_x, &coefficient_x, x) {
             // x is Inf. or NaN or 0
-            if ((x & INFINITY_MASK32) == INFINITY_MASK32) {
+            if (x & INFINITY_MASK32) == INFINITY_MASK32 {
                 var res = coefficient_x
-                if ((coefficient_x & SSNAN_MASK32) == SINFINITY_MASK32) {   // -Infinity
+                if (coefficient_x & SSNAN_MASK32) == SINFINITY_MASK32 {   // -Infinity
                     res = NAN_MASK32
                     status.insert(.invalidOperation)
                     //__set_status_flags (pfpsf, BID_INVALID_EXCEPTION);
                 }
-                if ((x & SNAN_MASK32) == SNAN_MASK32) {   // sNaN
+                if (x & SNAN_MASK32) == SNAN_MASK32 {   // sNaN
                     status.insert(.invalidOperation)
                 }
-                return (res & QUIET_MASK32);
+                return res & QUIET_MASK32
             }
             // x is 0
-            exponent_x = (exponent_x + DECIMAL_EXPONENT_BIAS_32) >> 1;
-            return sign_x | (UInt32(exponent_x) << 23);
+            exponent_x = (exponent_x + DECIMAL_EXPONENT_BIAS_32) >> 1
+            return sign_x | (UInt32(exponent_x) << 23)
         }
         // x<0?
         if (sign_x != 0) && (coefficient_x != 0) {
@@ -1010,7 +1005,7 @@ extension Decimal32 {
         let bin_expon_cx = Int(((tempx.bitPattern >> 23) & 0xff) - 0x7f)
         var digits_x = bid_estimate_decimal_digits[bin_expon_cx];
         // add test for range
-        if (coefficient_x >= bid_power10_index_binexp[bin_expon_cx]) {
+        if coefficient_x >= bid_power10_index_binexp[bin_expon_cx] {
             digits_x+=1
         }
         
@@ -1162,7 +1157,7 @@ extension Decimal32 {
         }
         coefficient_z *= UInt32(bid_power10_table_128[scale_k].w[0])
         
-        return UInt64(get_BID32(sign_z, exponent_z - scale_k, coefficient_z, rounding_mode, &fpsc).x)
+        return UInt64(get_BID32(sign_z, exponent_z - scale_k, coefficient_z, rounding_mode, &fpsc))
     }
     
     /*****************************************************************************
@@ -1180,45 +1175,33 @@ extension Decimal32 {
      *
      ****************************************************************************/
     static func bid32_fma(_ x:UInt32, _ y:UInt32, _ z:UInt32, _ rmode:Rounding, _ pfpsf:inout Status) -> UInt32 {
-        
-        //      BID_UINT128 P, Tmp, CB, Q_high, Q_low, Stemp, C128;
-        //      BID_UINT64 P0, C64, remainder_h, rem_l, carry, CY, coefficient_a, coefficient_b, sign_ab;
-        //      BID_UINT32 sign_x, sign_y, coefficient_x, coefficient_y, sign_z,
-        //        coefficient_z, R;
-        //      BID_UINT32 sign_a, sign_b, res;
-        //      BID_UINT32 valid_x, valid_y, valid_z;
-        //      int_double tempx;
-        //      int extra_digits, exponent_x, exponent_y, exponent_z, bin_expon, rmode, inexact=0;
-        //      int n_digits, amount, status, exponent_a, exponent_b, diff_dec_expon, d2, scale_ca;
-        //
-        //      BID_OPT_SAVE_BINARY_FLAGS()
         var sign_x = UInt32(), exponent_x = 0, coefficient_x = UInt32()
         var sign_y = UInt32(), exponent_y = 0, coefficient_y = UInt32()
         var sign_z = UInt32(), exponent_z = 0, coefficient_z = UInt32()
-        let valid_x = unpack_BID32 (&sign_x, &exponent_x, &coefficient_x, x)
-        let valid_y = unpack_BID32 (&sign_y, &exponent_y, &coefficient_y, y)
-        let valid_z = unpack_BID32 (&sign_z, &exponent_z, &coefficient_z, z)
+        let valid_x = unpack_BID32(&sign_x, &exponent_x, &coefficient_x, x)
+        let valid_y = unpack_BID32(&sign_y, &exponent_y, &coefficient_y, y)
+        let valid_z = unpack_BID32(&sign_z, &exponent_z, &coefficient_z, z)
         
         // unpack arguments, check for NaN, Infinity, or 0
         var res:UInt32
         if !valid_x || !valid_y || !valid_z {
-            if ((y & NAN_MASK32) == NAN_MASK32) {
-                if (((x & SNAN_MASK32) == SNAN_MASK32)    // sNaN
-                    || ((y & SNAN_MASK32) == SNAN_MASK32) || ((z & SNAN_MASK32) == SNAN_MASK32)) {
+            if (y & NAN_MASK32) == NAN_MASK32 {
+                if ((x & SNAN_MASK32) == SNAN_MASK32) || ((y & SNAN_MASK32) == SNAN_MASK32) || ((z & SNAN_MASK32) == SNAN_MASK32) { // sNaN
                     pfpsf.insert(.invalidOperation)
                     //__set_status_flags (pfpsf, BID_INVALID_EXCEPTION);
                 }
                 return coefficient_y & QUIET_MASK32
             }
-            if ((z & NAN_MASK32) == NAN_MASK32) {
-                if (((x & SNAN_MASK32) == SNAN_MASK32)    // sNaN
-                    || ((z & SNAN_MASK32) == SNAN_MASK32)) {
+            if (z & NAN_MASK32) == NAN_MASK32 {
+                if ((x & SNAN_MASK32) == SNAN_MASK32) || ((z & SNAN_MASK32) == SNAN_MASK32) {
+                    // sNaN
                     pfpsf.insert(.invalidOperation)
                 }
                 return coefficient_z & QUIET_MASK32
             }
-            if ((x & NAN_MASK32) == NAN_MASK32) {
-                if (((x & SNAN_MASK32) == SNAN_MASK32)) {   // sNaN
+            if (x & NAN_MASK32) == NAN_MASK32 {
+                if (x & SNAN_MASK32) == SNAN_MASK32 {
+                    // sNaN
                     pfpsf.insert(.invalidOperation)
                 }
                 return coefficient_x & QUIET_MASK32
@@ -1269,13 +1252,13 @@ extension Decimal32 {
                     if coefficient_x == 0 {
                         // y==0, return NaN
                         pfpsf.insert(.invalidOperation)
-                        return (NAN_MASK32)
+                        return NAN_MASK32
                     }
                     // test if z is Inf of oposite sign
                     if (((z & NAN_MASK32) == INFINITY_MASK32) && (((x ^ y) ^ z) & SIGN_MASK32) != 0) {
                         pfpsf.insert(.invalidOperation)
                         // return NaN
-                        return (NAN_MASK32)
+                        return NAN_MASK32
                     }
                     // otherwise return +/-Inf
                     return (((x ^ y) & SIGN_MASK32) | INFINITY_MASK32)
@@ -1284,11 +1267,11 @@ extension Decimal32 {
                 if (z & INFINITY_MASK32) != INFINITY_MASK32 {
                     
                     if coefficient_z != 0 {
-                        exponent_y += exponent_x - DECIMAL_EXPONENT_BIAS_32;
+                        exponent_y += exponent_x - DECIMAL_EXPONENT_BIAS_32
                         
-                        sign_z = z & SIGN_MASK32;
+                        sign_z = z & SIGN_MASK32
                         
-                        if (exponent_y >= exponent_z) {
+                        if exponent_y >= exponent_z {
                             return z
                         }
                         return UInt32(add_zero32 (exponent_y, sign_z, exponent_z, coefficient_z, rmode, &pfpsf))
@@ -1361,10 +1344,10 @@ extension Decimal32 {
             let bin_expon = Int((tempx.bitPattern & Decimal64.MASK_BINARY_EXPONENT) >> 52) - BINARY_EXPONENT_BIAS
             let scale_ca = Int(bid_estimate_decimal_digits[bin_expon])
             
-            let d2 = 31 - scale_ca;
-            if (diff_dec_expon > d2) {
-                diff_dec_expon = d2;
-                exponent_b = exponent_a - diff_dec_expon;
+            let d2 = 31 - scale_ca
+            if diff_dec_expon > d2 {
+                diff_dec_expon = d2
+                exponent_b = exponent_a - diff_dec_expon
             }
             if coefficient_b != 0 {
                 inexact=true
@@ -1405,18 +1388,18 @@ extension Decimal32 {
                     n_digits += 1
                 }
             } else { // result = 0
-                sign_a = 0;
+                sign_a = 0
                 if rmode == BID_ROUNDING_DOWN { sign_a = SIGN_MASK32 }
                 if coefficient_a == 0 { sign_a = sign_x }
-                n_digits=0
+                n_digits = 0
             }
         }
         
         if n_digits <= MAX_FORMAT_DIGITS_32 {
-            return get_BID32_UF (sign_a, exponent_b, P.w[0], 0, rmode, &pfpsf).x
+            return get_BID32_UF (sign_a, exponent_b, P.w[0], 0, rmode, &pfpsf)
         }
         
-        let extra_digits = n_digits - 7;
+        let extra_digits = n_digits - 7
         
         var rmode1 = roundboundIndex(rmode, sign_a != 0, 0) // rnd_mode;
         //            if (sign_a && (unsigned) (rmode - 1) < 2) {
@@ -1435,7 +1418,7 @@ extension Decimal32 {
             __mul_64x64_to_128(&Stemp, bid_round_const_table[rmode1][18], bid_power10_table_128[extra_digits-18].w[0])
             __add_128_128 (&P, P, Stemp)
             if rmode == BID_ROUNDING_UP {
-                __add_128_64(&P, P, bid_round_const_table[rmode1][extra_digits-18]);
+                __add_128_64(&P, P, bid_round_const_table[rmode1][extra_digits-18])
             }
         }
         
@@ -1456,7 +1439,7 @@ extension Decimal32 {
             
             // get remainder
             rem_l = Q_high.w[0]
-            if (amount<64) {
+            if amount < 64 {
                 remainder_h = Q_high.w[0] << (64 - amount); rem_l = 0
             } else {
                 remainder_h = Q_high.w[1] << (128 - amount)
@@ -1466,13 +1449,12 @@ extension Decimal32 {
             if ((remainder_h | rem_l) == 0
                 && (Q_low.w[1] < bid_reciprocals10_128[extra_digits].w[1]
                     || (Q_low.w[1] == bid_reciprocals10_128[extra_digits].w[1]
-                        && Q_low.w[0] <
-                        bid_reciprocals10_128[extra_digits].w[0]))) {
+                        && Q_low.w[0] < bid_reciprocals10_128[extra_digits].w[0]))) {
                 C64 -= 1
             }
         }
         
-        var status = Status.inexact  // BID_INEXACT_EXCEPTION;
+        var status = Status.inexact
         var carry = UInt64(), CY = UInt64()
         
         // get remainder
@@ -1480,7 +1462,7 @@ extension Decimal32 {
         if amount < 64 { remainder_h = Q_high.w[0] << (64 - amount); rem_l = 0 }
         else { remainder_h = Q_high.w[1] << (128 - amount) }
         
-        switch (rmode) {
+        switch rmode {
             case BID_ROUNDING_TO_NEAREST, BID_ROUNDING_TIES_AWAY:
                 // test whether fractional part is 0
                 if ((remainder_h == 0x8000000000000000 && rem_l == 0)
@@ -1507,17 +1489,16 @@ extension Decimal32 {
                         }
                     }
                 } else {
-                    rem_l += carry;
-                    remainder_h >>= (128 - amount);
+                    rem_l += carry
+                    remainder_h >>= (128 - amount)
                     if carry != 0 && rem_l == 0 { remainder_h += 1 }
-                    if ((remainder_h >= (UInt64(1) << (amount-64))) && !inexact) {
+                    if remainder_h >= (UInt64(1) << (amount-64)) && !inexact {
                         status = []
                     }
                 }
         }
         
         pfpsf.formUnion(status)
-        // __set_status_flags (pfpsf, status);
         
         let R = !status.isEmpty ? 1 : 0
         
@@ -1547,7 +1528,7 @@ extension Decimal32 {
                 return sign_a | 1000000
             }
         }
-        return get_BID32_UF(sign_a, exponent_b+extra_digits, C64, R, rmode, &pfpsf).x
+        return get_BID32_UF(sign_a, exponent_b+extra_digits, C64, R, rmode, &pfpsf)
     }
     
 }

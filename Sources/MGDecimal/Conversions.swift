@@ -207,7 +207,7 @@ extension Decimal128 {
         }
         
         return Decimal32.get_BID32 (UInt32(sign_x >> 32), exponent_x - DECIMAL_EXPONENT_BIAS_128 +
-                                    Decimal32.DECIMAL_EXPONENT_BIAS_32, UInt32(CX.w[0]), rmode, &pfpsf).x
+                                    Decimal32.DECIMAL_EXPONENT_BIAS_32, UInt32(CX.w[0]), rmode, &pfpsf)
     }
     
     //
@@ -514,7 +514,7 @@ extension Decimal64 {
                 // __set_status_flags (pfpsf, status)
             }
         }
-        return Decimal32.get_BID32 (UInt32(sign_x >> 32), exponent_x, UInt32(coefficient_x), rmode, &pfpsf).x
+        return Decimal32.get_BID32(UInt32(sign_x >> 32), exponent_x, UInt32(coefficient_x), rmode, &pfpsf)
     }
     
 }
@@ -837,14 +837,13 @@ extension Decimal32 {
         // Remember to compensate for the fact that exponents are integer for quad
         c.w[1] = 0
         c = sll128_short(c.w[1], c.w[0], 60)
-        t += (113 - 53);
-        e -= (113 - 53); // Now e belongs [-1186;911].
+        t += (113 - 53)
+        e -= (113 - 53) // Now e belongs [-1186;911].
         
         // Check for "trivial" overflow, when 2^e * 2^112 > 10^emax * 10^d.
         // We actually check if e >= ceil((emax + d) * log_2(10) - 112)
         // This could be intercepted later, but it's convenient to keep tables smaller
         if e >= 211 {
-            // __set_status_flags(pfpsf, BID_OVERFLOW_INEXACT_EXCEPTION);
             state.formUnion([.overflow, .inexact])
             return return_bid32_ovf(s)
         }
@@ -1060,50 +1059,54 @@ extension Decimal32 {
      *    BID32 pack/unpack macros
      *
      *****************************************************************************/
-    static func unpack_BID32 (_ psign_x: inout UInt32, _ pexponent_x: inout Int, _ pcoefficient_x: inout UInt32, _ x: UInt32) -> Bool {
-        psign_x = x & SIGN_MASK32
+    static func unpack_BID32 (_ sgn: inout UInt32, _ exp: inout Int, _ coeff: inout UInt32, _ x: UInt32) -> Bool {
+        sgn = x & SIGN_MASK32
         
         if (x & SPECIAL_ENCODING_MASK32) == SPECIAL_ENCODING_MASK32 {
             // special encodings
             if (x & INFINITY_MASK32) == INFINITY_MASK32 {
-                pcoefficient_x = x & 0xfe0fffff;
-                if (x & 0x000fffff) >= 1000000 {
-                    pcoefficient_x = x & SSNAN_MASK32
+                coeff = x & 0xfe0f_ffff
+                if (x & 0x000f_ffff) >= 1_000_000 {
+                    coeff = x & SSNAN_MASK32
                 }
                 if (x & NAN_MASK32) == INFINITY_MASK32 {
-                    pcoefficient_x = x & SINFINITY_MASK32
+                    coeff = x & SINFINITY_MASK32
                 }
-                pexponent_x = 0
+                exp = 0
                 return false    // NaN or Infinity
             }
             // coefficient
-            pcoefficient_x = (x & SMALL_COEFF_MASK32) | LARGE_COEFF_HIGH_BIT32
+            coeff = (x & SMALL_COEFF_MASK32) | LARGE_COEFF_HIGH_BIT32
+            
             // check for non-canonical value
-            if pcoefficient_x > BID32_SIG_MAX {
-                pcoefficient_x = 0
+            if coeff > BID32_SIG_MAX {
+                coeff = 0
             }
+            
             // get exponent
             let tmp = x >> 21
-            pexponent_x = Int(tmp & EXPONENT_MASK32)
-            return pcoefficient_x != 0
+            exp = Int(tmp & EXPONENT_MASK32)
+            return coeff != 0
         }
+        
         // exponent
         let tmp = x >> 23;
-        pexponent_x = Int(tmp & EXPONENT_MASK32)
+        exp = Int(tmp & EXPONENT_MASK32)
+        
         // coefficient
-        pcoefficient_x = (x & LARGE_COEFF_MASK32)
-        return pcoefficient_x != 0
+        coeff = (x & LARGE_COEFF_MASK32)
+        return coeff != 0
     }
     
     //
     //   no overflow/underflow checks
     //
-    static func very_fast_get_BID32 (_ sgn:UInt32, _ expon:Int, _ coeff:UInt32) -> UInt32  {
+    static func very_fast_get_BID32 (_ sgn: UInt32, _ expon: Int, _ coeff: UInt32) -> UInt32  {
         var mask = UInt32(1) << 23
         
         // check whether coefficient fits in 10*2+3 bits
-        var r:UInt32
-        if (coeff < mask) {
+        var r: UInt32
+        if coeff < mask {
             r = UInt32(expon)
             r <<= 23
             r |= (coeff | sgn)
@@ -1119,37 +1122,37 @@ extension Decimal32 {
         return r
     }
     
-    static func fast_get_BID32 (_ sgn:UInt32, _ expon:Int, _ coeff:UInt32) -> UInt32  {
-        var mask = UInt32(1) << 23
+    static func fast_get_BID32 (_ sgn: UInt32, _ expon: Int, _ coeff: UInt32) -> UInt32  {
+        // var mask = UInt32(1) << 23
         var expon = expon
         var coeff = coeff
         if coeff > BID32_SIG_MAX {
-            expon+=1
+            expon += 1
             coeff = 1000000
         }
-        // check whether coefficient fits in 10*2+3 bits
-        var r:UInt32
-        if coeff < mask {
-            r = UInt32(expon)
-            r <<= 23;
-            r |= (coeff | sgn)
-            return r;
-        }
-        // special format
-        r = UInt32(expon)
-        r <<= 21
-        r |= (sgn | SPECIAL_ENCODING_MASK32)
-        // add coeff, without leading bits
-        mask = (1 << 21) - 1
-        r |= coeff & mask
-        
-        return r;
+        return very_fast_get_BID32(sgn, expon, coeff)
+//        // check whether coefficient fits in 10*2+3 bits
+//        var r: UInt32
+//        if coeff < mask {
+//            r = UInt32(expon)
+//            r <<= 23
+//            r |= (coeff | sgn)
+//            return r;
+//        }
+//        // special format
+//        r = UInt32(expon)
+//        r <<= 21
+//        r |= (sgn | SPECIAL_ENCODING_MASK32)
+//        // add coeff, without leading bits
+//        mask = (1 << 21) - 1
+//        r |= coeff & mask
+//        return r
     }
     
     //
     //   General pack macro for BID32
     //
-    static func get_BID32 (_ sgn: UInt32, _ expon: Int, _ coeff:UInt32, _ rmode: Rounding, _ fpsc: inout Status) -> Decimal32 {
+    static func get_BID32 (_ sgn: UInt32, _ expon: Int, _ coeff: UInt32, _ rmode: Rounding, _ fpsc: inout Status) -> UInt32 {
         var expon = expon
         var coeff = coeff
         var rmode = rmode
@@ -1158,21 +1161,22 @@ extension Decimal32 {
             expon += 1
             coeff = 1000000
         }
+        
         // check for possible underflow/overflow
         if UInt32(expon) > DECIMAL_MAX_EXPON_32 {
             if expon < 0 {
                 // underflow
                 if expon + MAX_FORMAT_DIGITS_32 < 0 {
                     fpsc.formUnion([.underflow, .inexact])
-                    if (rmode == .down && sgn != 0) {
-                        return Decimal32(raw: 0x80000001)
+                    if rmode == .down && sgn != 0 {
+                        return 0x80000001
                     }
                     if (rmode == .up && sgn == 0) {
-                        return Decimal32(raw: 1)
+                        return 1
                     }
                 }
                 // result is 0
-                return Decimal32(raw: sgn)
+                return sgn
             }
             
             // swap up & down round modes when negative
@@ -1247,7 +1251,7 @@ extension Decimal32 {
                     //                  __set_status_flags (fpsc, BID_UNDERFLOW_EXCEPTION | status);
                 }
                 
-                return Decimal32(raw: sgn | UInt32(_C64))
+                return sgn | UInt32(_C64)
             }
             
             if coeff == 0 { if expon > DECIMAL_MAX_EXPON_32 { expon = DECIMAL_MAX_EXPON_32 } }
@@ -1273,7 +1277,7 @@ extension Decimal32 {
                         }
                     default: break
                 }
-                return Decimal32(raw: r)
+                return r
             }
         }
         
@@ -1284,7 +1288,7 @@ extension Decimal32 {
             var r = UInt32(expon)
             r <<= 23
             r |= (coeff | sgn)
-            return Decimal32(raw: r)
+            return r
         }
         
         // special format
@@ -1295,13 +1299,13 @@ extension Decimal32 {
         // add coeff, without leading bits
         mask = (UInt32(1) << 21) - 1
         r |= coeff & mask
-        return Decimal32(raw: r)
+        return r
     }
     
     //
     //   General pack macro for BID32
     //
-    static func get_BID32_UF (_ sgn:UInt32, _ expon:Int, _ coeff:UInt64, _ R: Int, _ rmode:Rounding, _ fpsc: inout Status) -> Decimal32 {
+    static func get_BID32_UF (_ sgn: UInt32, _ expon: Int, _ coeff: UInt64, _ R: Int, _ rmode:Rounding, _ fpsc: inout Status) -> UInt32 {
         var expon = expon
         var coeff = coeff
         var rmode = rmode
@@ -1317,13 +1321,13 @@ extension Decimal32 {
                 if (expon + MAX_FORMAT_DIGITS_32 < 0) {
                     fpsc.formUnion([.underflow, .inexact])
                     if (rmode == .halfDown && sgn != 0) {
-                        return Decimal32(raw: 0x80000001)
+                        return 0x80000001
                     }
                     if (rmode == .halfUp && sgn == 0) {
-                        return Decimal32(raw: 1)
+                        return 1
                     }
                     // result is 0
-                    return Decimal32(raw: sgn)
+                    return sgn
                 }
                 
                 // swap up & down round modes when negative
@@ -1364,7 +1368,7 @@ extension Decimal32 {
                         remainder_h >>= amount2
                         remainder_h = remainder_h & Q.w[1]
                         
-                        if (remainder_h == 0 && (Q.w[0] < bid_reciprocals10_64[extra_digits])) {
+                        if remainder_h == 0 && (Q.w[0] < bid_reciprocals10_64[extra_digits]) {
                             _C64-=1
                         }
                     }
@@ -1377,23 +1381,21 @@ extension Decimal32 {
                     // get remainder
                     let remainder_h = Q.w[1] << (64 - amount)
                     
-                    switch (rmode) {
-                        case .halfEven,  // BID_ROUNDING_TO_NEAREST:
-                                .halfUp: // BID_ROUNDING_TIES_AWAY:
+                    switch rmode {
+                        case BID_ROUNDING_TO_NEAREST, BID_ROUNDING_TIES_AWAY:
                             // test whether fractional part is 0
                             if (remainder_h == Decimal64.SIGN_MASK64 && (Q.w[0] < bid_reciprocals10_64[extra_digits])) {
                                 status = Status.clearFlags // BID_EXACT_STATUS;
                             }
-                        case .halfDown, //BID_ROUNDING_DOWN:
-                                .down: // BID_ROUNDING_TO_ZERO:
-                            if (remainder_h == 0 && (Q.w[0] < bid_reciprocals10_64[extra_digits])) {
+                        case BID_ROUNDING_DOWN, BID_ROUNDING_TO_ZERO:
+                            if remainder_h == 0 && (Q.w[0] < bid_reciprocals10_64[extra_digits]) {
                                 status = Status.clearFlags // BID_EXACT_STATUS;
                             }
                         default:
                             // round up
                             var Stemp = UInt64(0), carry = UInt64(0)
                             __add_carry_out (&Stemp, &carry, Q.w[0], bid_reciprocals10_64[extra_digits])
-                            if ((remainder_h >> (64 - amount)) + carry >= UInt64(1) << amount) {
+                            if (remainder_h >> (64 - amount)) + carry >= UInt64(1) << amount {
                                 status = Status.clearFlags // BID_EXACT_STATUS;
                             }
                     }
@@ -1401,37 +1403,33 @@ extension Decimal32 {
                     if !status.isEmpty {
                         status.insert(.underflow)
                         fpsc.formUnion(status)
-                        // __set_status_flags (fpsc,  BID_UNDERFLOW_EXCEPTION|status);
                     }
                 }
-                
-                return Decimal32(raw: sgn | UInt32(_C64))
+                return sgn | UInt32(_C64)
             }
             
             while coeff < 1000000 && expon > DECIMAL_MAX_EXPON_32 {
                 coeff = (coeff << 3) + (coeff << 1)
-                expon-=1
+                expon -= 1
             }
             if UInt32(expon) > DECIMAL_MAX_EXPON_32 {
                 fpsc.formUnion([.overflow, .inexact])
-                // __set_status_flags (fpsc, BID_OVERFLOW_EXCEPTION | BID_INEXACT_EXCEPTION);
-                // overflow
                 var r = sgn | INFINITY_MASK32
                 switch rmode {
-                    case .halfDown: // BID_ROUNDING_DOWN:
+                    case BID_ROUNDING_DOWN:
                         if sgn == 0 {
                             r = LARGEST_BID32
                         }
-                    case .down: // BID_ROUNDING_TO_ZERO:
+                    case BID_ROUNDING_TO_ZERO:
                         r = sgn | LARGEST_BID32
-                    case .halfUp: // BID_ROUNDING_UP:
+                    case BID_ROUNDING_UP:
                         // round up
                         if sgn != 0 {
                             r = sgn | LARGEST_BID32
                         }
                     default: break
                 }
-                return Decimal32(raw: r)
+                return r
             }
         }
         
@@ -1439,11 +1437,11 @@ extension Decimal32 {
         var r: UInt32
         
         // check whether coefficient fits in DECIMAL_COEFF_FIT bits
-        if (coeff < mask) {
+        if coeff < mask {
             r = UInt32(expon)
             r <<= 23;
             r |= UInt32(coeff) | sgn
-            return Decimal32(raw: r)
+            return r
         }
         // special format
         r = UInt32(expon)
@@ -1452,8 +1450,7 @@ extension Decimal32 {
         // add coeff, without leading bits
         mask = (UInt32(1) << 21) - 1
         r |= (UInt32(coeff) & mask)
-        
-        return Decimal32(raw: r)
+        return r
     }
     
     /*****************************************************************************
@@ -1610,86 +1607,116 @@ extension Decimal32 {
 
 extension Decimal32 {
     
-    static func bid32_to_string (_ ps: inout String, _ x: Decimal32, _ round: Rounding, _ pfpsf: Status) {
-        let x = x.x
-        // unpack arguments, check for NaN or Infinity
-        var sign_x = UInt32(0), coefficient_x = UInt32(0)
-        var exponent_x = 0
+    static func bid32_to_string (_ x: UInt32, _ showPlus: Bool = false) -> String {
         
-        if !unpack_BID32 (&sign_x, &exponent_x, &coefficient_x, x) {
-            ps = sign_x != 0 ? "-" : "+"
+        var digits = 0
+        
+        func stripZeros(_ d: UInt64, _ addDecimal: Bool = false) -> String {
+            var digs = bid_midi_tbl[Int(d)]
+            if digs.first! == "0" { digs.removeFirst() }
+            if digs.first! == "0" && digs.count == 2 { digs.removeFirst() }
+            digits += digs.count
+            if addDecimal {
+                if digs.count == 1 { digs += "." }
+                else { digs.insert(".", at: digs.index(after: digs.startIndex)) }
+            }
+            return digs
+        }
+        
+        // unpack arguments, check for NaN or Infinity
+        let addDecimal = true
+        let plus = showPlus ? "+" : ""
+        var sign_x = UInt32(0), coefficient_x = UInt32(0), exponent_x = 0
+        let special = !unpack_BID32 (&sign_x, &exponent_x, &coefficient_x, x)
+        
+        if special {
             // x is Inf. or NaN or 0
+            var ps = sign_x != 0 ? "-" : plus
             if (x&NAN_MASK32) == NAN_MASK32 {
                 if (x & SNAN_MASK32) == SNAN_MASK32 { ps.append("S") }
                 ps.append("NaN")
-                return
+                return ps
             }
             if (x&INFINITY_MASK32) == INFINITY_MASK32 {
                 ps.append("Inf")
-                return
+                return ps
             }
             ps.append("0")
-        } else { // x is not special
-            ps = sign_x != 0 ? "-" : "+"
+            return ps
+        } else {
+            // x is not special
+            var ps = ""
             if coefficient_x >= 1_000_000 {
                 var CT = UInt64(coefficient_x) * 0x431B_DE83
-                CT >>= 32;
+                CT >>= 32
                 var d = CT >> (50-32)
-                ps.append(String(d))
                 
-                coefficient_x -= UInt32(d*1_000_000)
+                // upper digit
+                ps.append(String(d))
+                ps.append(".")
+                digits += 1
+                coefficient_x -= UInt32(d * 1_000_000)
                 
                 // get lower 6 digits
                 CT = UInt64(coefficient_x) * 0x20C4_9BA6
                 CT >>= 32
                 d = CT >> (39-32)
-                ps += bid_midi_tbl[Int(d)]
-                
-                d = UInt64(coefficient_x) - d*1000
-                
-                ps += bid_midi_tbl[Int(d)]
+                ps += bid_midi_tbl[Int(d)]; digits += 3
+                d = UInt64(coefficient_x) - d * 1000
+                ps += bid_midi_tbl[Int(d)]; digits += 3
             } else if coefficient_x >= 1000 {
                 var CT = UInt64(coefficient_x) * 0x20C4_9BA6
                 CT >>= 32
                 var d = CT >> (39-32)
-                
-                var digs = bid_midi_tbl[Int(d)]
-                if digs.first! == "0" { digs.removeFirst() }
-                if digs.first! == "0" && digs.count == 2 { digs.removeFirst() }
-                ps += digs
-                
+                ps += stripZeros(d, addDecimal)
                 d = UInt64(coefficient_x) - d*1000
-                
-                ps += bid_midi_tbl[Int(d)]
+                ps += bid_midi_tbl[Int(d)]; digits += 3
             } else {
-                let d = coefficient_x
-                var digs = bid_midi_tbl[Int(d)]
-                if digs.first! == "0" { digs.removeFirst() }
-                if digs.first! == "0" && digs.count == 2 { digs.removeFirst() }
-                ps += digs
+                ps += stripZeros(UInt64(coefficient_x), addDecimal)
             }
+            
+            // remove trailing decimal point
+            if ps.hasSuffix(".") { ps.removeLast() }
+            
+            exponent_x -= DECIMAL_EXPONENT_BIAS_32 - (digits - 1)
+            if exponent_x == 0 { return ps }
+            if abs(exponent_x) > 6 {
+                ps += "e"
+                if exponent_x < 0 {
+                    ps += "-"
+                    exponent_x = -exponent_x
+                } else {
+                    ps += "+"
+                }
+                ps += stripZeros(UInt64(exponent_x))
+            } else if digits < exponent_x {
+                // format the number without an exponent
+                while digits < exponent_x {
+                    // pad the number with zeros
+                    ps += "0"; digits += 1
+                }
+            } else if exponent_x < 0 {
+                ps = ps.replacingOccurrences(of: ".", with: "")
+                while exponent_x < -1 {
+                    // insert leading zeros
+                    ps = "0" + ps; exponent_x += 1
+                }
+                ps = "0." + ps
+            } else {
+                // move the decimal point
+                ps = ps.replacingOccurrences(of: ".", with: "")
+                ps.insert(".", at: ps.index(ps.startIndex, offsetBy: exponent_x+1))
+                if ps.hasSuffix(".") { ps.removeLast() }
+            }
+            return (sign_x != 0 ? "-" : plus) + ps
         }
-        
-        ps += "E"
-        
-        exponent_x -= DECIMAL_EXPONENT_BIAS_32
-        if exponent_x < 0 {
-            ps += "-"
-            exponent_x = -exponent_x;
-        } else {
-            ps += "+"
-        }
-        
-        var digs = bid_midi_tbl[exponent_x]
-        if digs.first! == "0" { digs.removeFirst() }
-        if digs.first! == "0" && digs.count == 2 { digs.removeFirst() }
-        ps += digs
     }
     
     
-    static func bid32_from_string (_ res: inout Decimal32, _ ps: String, _ rnd_mode: Rounding, _ pfpsf: inout Status) {
+    static func bid32_from_string (_ ps: String, _ rnd_mode: Rounding, _ pfpsf: inout Status) -> UInt32 {
         // eliminate leading whitespace
         var ps = ps.trimmingCharacters(in: .whitespaces).lowercased()
+        var res: UInt32
         
         // get first non-whitespace character
         var c = ps.isEmpty ? "\0" : ps.removeFirst()
@@ -1698,46 +1725,41 @@ extension Decimal32 {
         if c == "\0" || (c != "." && c != "-" && c != "+" && (c < "0" || c > "9")) {
             // Infinity?
             if c == "i" && (ps.hasPrefix("nfinity") || ps.hasPrefix("nf")) {
-                res = Decimal32(raw: INFINITY_MASK32)
-                return
+                return INFINITY_MASK32
             }
             // return sNaN
             if c == "s" && ps.hasPrefix("nan") {
                 // case insensitive check for snan
-                res = Decimal32(raw: SNAN_MASK32)
-                return
+                return SNAN_MASK32
             } else {
                 // return qNaN
-                res = Decimal32(raw: NAN_MASK32)
-                return
+                return NAN_MASK32
             }
         }
         // detect +INF or -INF
         if ps.hasPrefix("infinity") || ps.hasPrefix("inf") {
             if c == "+" {
-                res = Decimal32(raw: INFINITY_MASK32)
+                res = INFINITY_MASK32
             } else if c == "-" {
-                res = Decimal32(raw: SINFINITY_MASK32)
+                res = SINFINITY_MASK32
             } else {
-                res = Decimal32(raw: NAN_MASK32)
+                res = NAN_MASK32
             }
-            return
+            return res
         }
         // if +sNaN, +SNaN, -sNaN, or -SNaN
         if ps.hasPrefix("snan") {
             if c == "-" {
-                res = Decimal32(raw: SSNAN_MASK32)
+                res = SSNAN_MASK32
             } else {
-                res = Decimal32(raw: SNAN_MASK32)
+                res = SNAN_MASK32
             }
-            return
+            return res
         }
         // determine sign
-        var sign_x : UInt32
+        var sign_x = UInt32(0)
         if c == "-" {
             sign_x = SIGN_MASK32
-        } else {
-            sign_x = 0
         }
         
         // get next character if leading +/- sign
@@ -1747,8 +1769,7 @@ extension Decimal32 {
         // if c isn"t a decimal point or a decimal digit, return NaN
         if c != "." && (c < "0" || c > "9") {
             // return NaN
-            res = Decimal32(raw:NAN_MASK32 | sign_x)
-            return
+            return NAN_MASK32 | sign_x
         }
         
         var rdx_pt_enc = false
@@ -1782,22 +1803,19 @@ extension Decimal32 {
                             if right_radix_leading_zeros < 0 {
                                 right_radix_leading_zeros = 0
                             }
-                            res = Decimal32(raw:(UInt32(right_radix_leading_zeros) << 23) | sign_x)
-                            return
+                            return (UInt32(right_radix_leading_zeros) << 23) | sign_x
                         }
                         c = ps.isEmpty ? "\0" : ps.removeFirst()
                     } else {
                         // if 2 radix points, return NaN
-                        res = Decimal32(raw:NAN_MASK32 | sign_x)
-                        return
+                        return NAN_MASK32 | sign_x
                     }
                 } else if !ps.isEmpty {
                     right_radix_leading_zeros = DECIMAL_EXPONENT_BIAS_32 - right_radix_leading_zeros
                     if right_radix_leading_zeros < 0 {
                         right_radix_leading_zeros = 0
                     }
-                    res = Decimal32(raw: (UInt32(right_radix_leading_zeros) << 23) | sign_x)
-                    return
+                    return (UInt32(right_radix_leading_zeros) << 23) | sign_x
                 }
             }
         }
@@ -1812,8 +1830,7 @@ extension Decimal32 {
             if c == "." {
                 if rdx_pt_enc {
                     // return NaN
-                    res = Decimal32(raw:NAN_MASK32 | sign_x)
-                    return
+                    return NAN_MASK32 | sign_x
                 }
                 rdx_pt_enc = true
                 c = ps.isEmpty ? "\0" : ps.removeFirst()
@@ -1828,23 +1845,23 @@ extension Decimal32 {
             } else if ndigits == 8 {
                 // coefficient rounding
                 switch rnd_mode {
-                    case .halfEven: // BID_ROUNDING_TO_NEAREST:
+                    case BID_ROUNDING_TO_NEAREST:
                         midpoint = (c == "5" && (coefficient_x & 1 == 0)) ? 1 : 0;
                         // if coefficient is even and c is 5, prepare to round up if
                         // subsequent digit is nonzero
                         // if str[MAXDIG+1] > 5, we MUST round up
                         // if str[MAXDIG+1] == 5 and coefficient is ODD, ROUND UP!
-                        if (c > "5" || (c == "5" && (coefficient_x & 1) != 0)) {
+                        if c > "5" || (c == "5" && (coefficient_x & 1) != 0) {
                             coefficient_x+=1
                             rounded_up = 1
                         }
                         
-                    case .halfDown: //BID_ROUNDING_DOWN:
-                        if (sign_x != 0) { coefficient_x+=1; rounded_up=1 }
-                    case .halfUp: //BID_ROUNDING_UP:
-                        if (sign_x == 0) { coefficient_x+=1; rounded_up=1 }
-                    case .up: // BID_ROUNDING_TIES_AWAY:
-                        if (c>="5") { coefficient_x+=1; rounded_up=1 }
+                    case BID_ROUNDING_DOWN:
+                        if sign_x != 0 { coefficient_x+=1; rounded_up=1 }
+                    case BID_ROUNDING_UP:
+                        if sign_x == 0 { coefficient_x+=1; rounded_up=1 }
+                    case BID_ROUNDING_TIES_AWAY:
+                        if c >= "5" { coefficient_x+=1; rounded_up=1 }
                     default: break
                 }
                 if coefficient_x == 10000000 {
@@ -1857,7 +1874,7 @@ extension Decimal32 {
                 add_expon += 1;
             } else { // ndigits > 8
                 add_expon+=1
-                if (midpoint != 0 && c > "0") {
+                if midpoint != 0 && c > "0" {
                     coefficient_x+=1
                     midpoint = 0;
                     rounded_up = 1;
@@ -1875,14 +1892,12 @@ extension Decimal32 {
             if rounded != 0 {
                 pfpsf.insert(.inexact)
             }
-            res = get_BID32 (sign_x, add_expon+DECIMAL_EXPONENT_BIAS_32, UInt32(coefficient_x), .halfEven, &pfpsf)
-            return
+            return get_BID32(sign_x, add_expon+DECIMAL_EXPONENT_BIAS_32, UInt32(coefficient_x), .halfEven, &pfpsf)
         }
         
         if c != "e" {
             // return NaN
-            res = Decimal32(raw: NAN_MASK32 | sign_x)
-            return
+            return NAN_MASK32 | sign_x
         }
         c = ps.isEmpty ? "\0" : ps.removeFirst()
         let sgn_expon = (c == "-") ? 1 : 0
@@ -1892,8 +1907,7 @@ extension Decimal32 {
         }
         if ps.isEmpty || c < "0" || c > "9" {
             // return NaN
-            res = Decimal32(raw: NAN_MASK32 | sign_x)
-            return
+            return NAN_MASK32 | sign_x
         }
         
         while (c >= "0") && (c <= "9") {
@@ -1906,8 +1920,7 @@ extension Decimal32 {
         
         if c != "\0" {
             // return NaN
-            res = Decimal32(raw: NAN_MASK32 | sign_x)
-            return
+            return NAN_MASK32 | sign_x
         }
         
         if rounded != 0 {
@@ -1924,10 +1937,9 @@ extension Decimal32 {
             if rounded_up != 0 {
                 coefficient_x-=1
             }
-            res = get_BID32_UF (sign_x, expon_x, UInt64(coefficient_x), rounded, .halfEven, &pfpsf)
-            return
+            return get_BID32_UF (sign_x, expon_x, UInt64(coefficient_x), rounded, .halfEven, &pfpsf)
         }
-        res = get_BID32 (sign_x, expon_x, UInt32(coefficient_x), rnd_mode, &pfpsf)
+        return get_BID32 (sign_x, expon_x, UInt32(coefficient_x), rnd_mode, &pfpsf)
     }
     
 }

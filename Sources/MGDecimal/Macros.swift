@@ -77,7 +77,7 @@ func BID_SWAP128(_ x: inout UInt128) {
     } else if e == expMask {
         if c == 0 { return UInt64(return_bid32_inf(s)) } // number = infinity
         status.insert(.invalidOperation)
-        return UInt64(return_bid32_nan(s, (c << 13), 0))
+        return UInt64(return_bid32_nan(s, c << 13, 0))
     } else {
         c |= 1 << 52  // set upper bit
         e -= 1075
