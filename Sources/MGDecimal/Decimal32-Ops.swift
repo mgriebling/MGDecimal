@@ -109,7 +109,7 @@ extension Decimal32 {
         // exponent difference
         var diff_dec_expon = exponent_a - exponent_b
         
-        if diff_dec_expon > MAX_FORMAT_DIGITS_32 {
+        if diff_dec_expon > MAX_DIGITS {
             let tempx = Double(coefficient_a)
             let bin_expon = Int((tempx.bitPattern & Decimal64.MASK_BINARY_EXPONENT) >> 52) - BINARY_EXPONENT_BIAS
             let scale_ca = bid_estimate_decimal_digits[bin_expon]
@@ -148,7 +148,7 @@ extension Decimal32 {
             }
         }
         
-        if n_digits <= MAX_FORMAT_DIGITS_32 {
+        if n_digits <= MAX_DIGITS {
             return get_BID32(sign_a, exponent_b, UInt32(P), rmode, &status)
         }
         
@@ -193,7 +193,7 @@ extension Decimal32 {
         if (x & MASK_STEERING_BITS32) == MASK_STEERING_BITS32 {
             let exp = Int(x & MASK_BINARY_EXPONENT2_32) >> 21
             let sig = (x & MASK_BINARY_SIG2_32) | MASK_BINARY_OR2_32
-            return (exp, sig, sig > BID32_SIG_MAX)
+            return (exp, sig, sig > MAX_NUMBER)
         } else {
             let exp = Int(x & MASK_BINARY_EXPONENT1_32) >> 23
             let sig = x & MASK_BINARY_SIG1_32
@@ -205,7 +205,7 @@ extension Decimal32 {
         if (x & MASK_STEERING_BITS32) == MASK_STEERING_BITS32 {
             let exp = Int(x & MASK_BINARY_EXPONENT2_32) >> 21
             let sig = (x & MASK_BINARY_SIG2_32) | MASK_BINARY_OR2_32
-            if sig > BID32_SIG_MAX { return (0, 0) }
+            if sig > MAX_NUMBER { return (0, 0) }
             return (exp, sig)
         } else {
             let exp = Int(x & MASK_BINARY_EXPONENT1_32) >> 23
@@ -290,7 +290,7 @@ extension Decimal32 {
         for _ in 0..<(exp_y - exp_x) {
             // recalculate y's significand upwards
             sig_y = sig_y * 10;
-            if (sig_y > BID32_SIG_MAX) {
+            if (sig_y > MAX_NUMBER) {
                 return false
             }
         }
@@ -517,7 +517,7 @@ extension Decimal32 {
                     } else { // pad with zeros until the exponent reaches emin
                         ind = x_exp
                         C1 = C1 * UInt32(bid_ten2k64[ind])
-                        x_exp = EXP_MIN32
+                        x_exp = MIN_EXPON
                     }
                 }
                 if x_sign == 0 {    // x > 0
@@ -532,7 +532,7 @@ extension Decimal32 {
                     // subtract 1 ulp (subtract 1 from the significand)
                     C1 -= 1
                     if C1 == 999_999 && x_exp != 0 { // if  C1 = 10^6 - 1
-                        C1 = UInt32(BID32_SIG_MAX) // C1 = 10^7 - 1
+                        C1 = UInt32(MAX_NUMBER) // C1 = 10^7 - 1
                         x_exp -= 1
                     }
                 }
@@ -596,9 +596,9 @@ extension Decimal32 {
                 }
                 sign_y = y & SIGN_MASK32
                 
-                exponent_x += exponent_y - DECIMAL_EXPONENT_BIAS_32
-                if (exponent_x > DECIMAL_MAX_EXPON_32) {
-                    exponent_x = DECIMAL_MAX_EXPON_32
+                exponent_x += exponent_y - EXPONENT_BIAS
+                if (exponent_x > MAX_EXPON) {
+                    exponent_x = MAX_EXPON
                 } else if (exponent_x < 0) {
                     exponent_x = 0
                 }
@@ -627,9 +627,9 @@ extension Decimal32 {
                 return ((x ^ y) & SIGN_MASK32) | INFINITY_MASK32
             }
             // y is 0
-            exponent_x += exponent_y - DECIMAL_EXPONENT_BIAS_32
-            if exponent_x > DECIMAL_MAX_EXPON_32 {
-                exponent_x = DECIMAL_MAX_EXPON_32
+            exponent_x += exponent_y - EXPONENT_BIAS
+            if exponent_x > MAX_EXPON {
+                exponent_x = MAX_EXPON
             } else if exponent_x < 0 {
                 exponent_x = 0
             }
@@ -647,7 +647,7 @@ extension Decimal32 {
             n_digits+=1
         }
         
-        exponent_x += exponent_y - DECIMAL_EXPONENT_BIAS_32
+        exponent_x += exponent_y - EXPONENT_BIAS
         
         let extra_digits = Int((n_digits<=7) ? 0 : (n_digits - 7))
         
@@ -691,7 +691,7 @@ extension Decimal32 {
             }
         }
         
-        if (exponent_x == -1) && (Q == BID32_SIG_MAX) && (rmode != BID_ROUNDING_TO_ZERO) {
+        if (exponent_x == -1) && (Q == MAX_NUMBER) && (rmode != BID_ROUNDING_TO_ZERO) {
             rmode1 = roundboundIndex(rmode, (sign_x^sign_y) != 0, 0)
 //            if ((sign_x^sign_y != 0) && UInt32(rmode1 - 1) < 2) {
 //                rmode1 = 3 - rmode1
@@ -787,9 +787,9 @@ extension Decimal32 {
                     sign_y = y & SIGN_MASK32
                 }
                 
-                exponent_x = exponent_x - exponent_y + DECIMAL_EXPONENT_BIAS_32
-                if exponent_x > DECIMAL_MAX_EXPON_32 {
-                    exponent_x = DECIMAL_MAX_EXPON_32
+                exponent_x = exponent_x - exponent_y + EXPONENT_BIAS
+                if exponent_x > MAX_EXPON {
+                    exponent_x = MAX_EXPON
                 } else if exponent_x < 0 {
                     exponent_x = 0
                 }
@@ -818,7 +818,7 @@ extension Decimal32 {
             status.insert(.divisionByZero)
             return ((sign_x ^ sign_y) | INFINITY_MASK32)
         }
-        var diff_expon = exponent_x - exponent_y + DECIMAL_EXPONENT_BIAS_32
+        var diff_expon = exponent_x - exponent_y + EXPONENT_BIAS
         
         var A, B, Q, R: UInt32
         var CA: UInt64
@@ -991,7 +991,7 @@ extension Decimal32 {
                 return res & QUIET_MASK32
             }
             // x is 0
-            exponent_x = (exponent_x + DECIMAL_EXPONENT_BIAS_32) >> 1
+            exponent_x = (exponent_x + EXPONENT_BIAS) >> 1
             return sign_x | (UInt32(exponent_x) << 23)
         }
         // x<0?
@@ -1018,11 +1018,11 @@ extension Decimal32 {
         let dqe = Foundation.sqrt(Double(A10))
         let QE = UInt32(dqe)
         if QE * QE == A10 {
-            return very_fast_get_BID32 (0, (exponent_x + DECIMAL_EXPONENT_BIAS_32) >> 1, QE);
+            return very_fast_get_BID32 (0, (exponent_x + EXPONENT_BIAS) >> 1, QE);
         }
         // if exponent is odd, scale coefficient by 10
         var scale = Int(13 - digits_x)
-        var exponent_q = exponent_x + DECIMAL_EXPONENT_BIAS_32 - scale
+        var exponent_q = exponent_x + EXPONENT_BIAS - scale
         scale += (exponent_q & 1);    // exp. bias is even
         
         let CT = bid_power10_table_128[scale].w[0]
@@ -1099,7 +1099,7 @@ extension Decimal32 {
                 exp_x = (x & MASK_BINARY_EXPONENT2_32) >> 21
                 sig_x = (x & MASK_BINARY_SIG2_32) | MASK_BINARY_OR2_32
                 // check for zero or non-canonical
-                if sig_x > BID32_SIG_MAX || sig_x == 0 {
+                if sig_x > MAX_NUMBER || sig_x == 0 {
                     exp = 0
                     res = (x & SIGN_MASK32) | (exp_x << 23) // zero of the same sign
                     return
@@ -1121,15 +1121,15 @@ extension Decimal32 {
             q-=1  // adjust so result is between 1 and 10
             // Do not add trailing zeros if q < 7; leave sig_x with q digits
             // sig_x = sig_x * bid_mult_factor[7 - q]; // sig_x has now 7 digits
-            exp = Int(exp_x) - DECIMAL_EXPONENT_BIAS_32 + q
+            exp = Int(exp_x) - EXPONENT_BIAS + q
             // assemble the result
             if (sig_x < LARGE_COEFF_HIGH_BIT32) { // sig_x < 2^23 (fits in 23 bits)
                 // res = (x & SIGN_MASK32) | ((-q + DECIMAL_EXPONENT_BIAS_32) << 23) | sig_x;
-                res = UInt32(x & 0x807fffff) | UInt32((-q + DECIMAL_EXPONENT_BIAS_32) << 23) // replace exponent
+                res = UInt32(x & 0x807fffff) | UInt32((-q + EXPONENT_BIAS) << 23) // replace exponent
             } else { // sig_x fits in 24 bits, but not in 23
                 // res = (x & SIGN_MASK32) | 0x60000000 |
                 //     ((-q + DECIMAL_EXPONENT_BIAS_32) << 21) | (sig_x & 0x001fffff);
-                res = UInt32(x & 0xe01fffff) | UInt32((-q + DECIMAL_EXPONENT_BIAS_32) << 21) // replace exponent
+                res = UInt32(x & 0xe01fffff) | UInt32((-q + EXPONENT_BIAS) << 21) // replace exponent
             }
         }
     }
@@ -1234,7 +1234,7 @@ extension Decimal32 {
                 if (((y & INFINITY_MASK32) != INFINITY_MASK32) && ((z & INFINITY_MASK32) != INFINITY_MASK32)) {
                     
                     if coefficient_z != 0 {
-                        exponent_y = exponent_x - DECIMAL_EXPONENT_BIAS_32 + exponent_y;
+                        exponent_y = exponent_x - EXPONENT_BIAS + exponent_y;
                         
                         sign_z = z & SIGN_MASK32;
                         
@@ -1267,7 +1267,7 @@ extension Decimal32 {
                 if (z & INFINITY_MASK32) != INFINITY_MASK32 {
                     
                     if coefficient_z != 0 {
-                        exponent_y += exponent_x - DECIMAL_EXPONENT_BIAS_32
+                        exponent_y += exponent_x - EXPONENT_BIAS
                         
                         sign_z = z & SIGN_MASK32
                         
@@ -1289,9 +1289,9 @@ extension Decimal32 {
                 // z is 0, return x*y
                 if (coefficient_x == 0) || (coefficient_y == 0) {
                     //0+/-0
-                    exponent_x += exponent_y - DECIMAL_EXPONENT_BIAS_32;
-                    if exponent_x > DECIMAL_MAX_EXPON_32 {
-                        exponent_x = DECIMAL_MAX_EXPON_32
+                    exponent_x += exponent_y - EXPONENT_BIAS;
+                    if exponent_x > MAX_EXPON {
+                        exponent_x = MAX_EXPON
                     } else if exponent_x < 0 {
                         exponent_x = 0
                         if exponent_x <= exponent_z {
@@ -1306,7 +1306,7 @@ extension Decimal32 {
                         }
                         return res
                     }
-                    let d2 = exponent_x + exponent_y - DECIMAL_EXPONENT_BIAS_32
+                    let d2 = exponent_x + exponent_y - EXPONENT_BIAS
                     if exponent_z > d2 {
                         exponent_z = d2
                     }
@@ -1315,7 +1315,7 @@ extension Decimal32 {
         }
         
         let P0 = UInt64(coefficient_x) * UInt64(coefficient_y)
-        exponent_x += exponent_y - DECIMAL_EXPONENT_BIAS_32;
+        exponent_x += exponent_y - EXPONENT_BIAS;
         
         // sort arguments by exponent
         var sign_a = UInt32(), exponent_a = 0, coefficient_a = UInt64()
@@ -1395,7 +1395,7 @@ extension Decimal32 {
             }
         }
         
-        if n_digits <= MAX_FORMAT_DIGITS_32 {
+        if n_digits <= MAX_DIGITS {
             return get_BID32_UF (sign_a, exponent_b, P.w[0], 0, rmode, &pfpsf)
         }
         
@@ -1502,7 +1502,7 @@ extension Decimal32 {
         
         let R = !status.isEmpty ? 1 : 0
         
-        if (UInt32(C64) == BID32_SIG_MAX) && (exponent_b+extra_digits == -1) && (rmode != BID_ROUNDING_TO_ZERO) {
+        if (UInt32(C64) == MAX_NUMBER) && (exponent_b+extra_digits == -1) && (rmode != BID_ROUNDING_TO_ZERO) {
             rmode1 = roundboundIndex(rmode, sign_a != 0, 0)
             //                if (sign_a && (unsigned) (rmode - 1) < 2) {
             //                    rmode = 3 - rmode;

@@ -10,7 +10,7 @@ import Foundation
 public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, ExpressibleByIntegerLiteral,
                           ExpressibleByFloatLiteral, Codable, Hashable {
     
-    private var enableStateOutput = false   // set to true to monitor variable state (i.e., invalid operations, etc.)
+    private static var enableStateOutput = false   // set to true to monitor variable state (i.e., invalid operations, etc.)
     
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // MARK: - Decimal number storage
@@ -40,7 +40,7 @@ public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, E
     init(raw: UInt32) { x = raw } // only for internal use
     
     private func showState() {
-        if enableStateOutput && !Decimal32.state.isEmpty { print("Warning: \(Decimal32.state)") }
+        if Decimal32.enableStateOutput && !Decimal32.state.isEmpty { print("Warning: \(Decimal32.state)") }
         Decimal32.state = .clearFlags
     }
     
@@ -113,11 +113,6 @@ public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, E
         return res
     }
     
-    // This is used with output of [Decimal32] values ??
-//    public var debugDescription: String {
-//        String(x, radix: 16, uppercase: true)
-//    }
-    
 }
 
 extension Decimal32 : AdditiveArithmetic, Comparable, SignedNumeric, Strideable, FloatingPoint {
@@ -134,7 +129,8 @@ extension Decimal32 : AdditiveArithmetic, Comparable, SignedNumeric, Strideable,
     }
     
     public mutating func formTruncatingRemainder(dividingBy other: Decimal32) {
-        /* TBD */
+        let q = (self/other).rounded(.towardZero)
+        self -= q * other
     }
     
     public mutating func formSquareRoot() { x = Decimal32.sqrt(x, Decimal32.rounding, &Decimal32.state) }
@@ -210,7 +206,7 @@ public extension Decimal32 {
     private var _isZero: Bool {
         if (x & Decimal32.INFINITY_MASK32) == Decimal32.INFINITY_MASK32 { return false }
         if (Decimal32.MASK_STEERING_BITS32 & x) == Decimal32.MASK_STEERING_BITS32 {
-            return (x & Decimal32.MASK_BINARY_SIG2_32) | Decimal32.MASK_BINARY_OR2_32 > Decimal32.BID32_SIG_MAX
+            return (x & Decimal32.MASK_BINARY_SIG2_32) | Decimal32.MASK_BINARY_OR2_32 > Decimal32.MAX_NUMBER
         } else {
             return (x & Decimal32.MASK_BINARY_SIG1_32) == 0
         }
@@ -228,7 +224,7 @@ public extension Decimal32 {
         } else if (x & Decimal32.MASK_INF32) == Decimal32.MASK_INF32 {
             return (x & 0x03ffffff) == 0
         } else if (x & Decimal32.MASK_STEERING_BITS32) == Decimal32.MASK_STEERING_BITS32 { // 24-bit
-            return ((x & Decimal32.MASK_BINARY_SIG2_32) | Decimal32.MASK_BINARY_OR2_32) <= Decimal32.BID32_SIG_MAX
+            return ((x & Decimal32.MASK_BINARY_SIG2_32) | Decimal32.MASK_BINARY_OR2_32) <= Decimal32.MAX_NUMBER
         } else { // 23-bit coeff.
             return true
         }
@@ -241,7 +237,7 @@ public extension Decimal32 {
         if (x & MASK_STEERING_BITS32) == MASK_STEERING_BITS32 {
             sig_x = (x & MASK_BINARY_SIG2_32) | MASK_BINARY_OR2_32
             // check for zero or non-canonical
-            if sig_x > Decimal32.BID32_SIG_MAX || sig_x == 0 { return nil } // zero or non-canonical
+            if sig_x > Decimal32.MAX_NUMBER || sig_x == 0 { return nil } // zero or non-canonical
             exp_x = Int((x & MASK_BINARY_EXPONENT2_32) >> 21)
         } else {
             sig_x = (x & MASK_BINARY_SIG1_32)
@@ -297,9 +293,9 @@ extension Decimal32 : DecimalFloatingPoint {
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // MARK: - DecimalFloatingPoint-required State variables
 
-    public static var exponentMaximum: Int          { DECIMAL_MAX_EXPON_32 }
-    public static var exponentBias: Int             { DECIMAL_EXPONENT_BIAS_32 }
-    public static var significandMaxDigitCount: Int { MAX_FORMAT_DIGITS_32 }
+    public static var exponentMaximum: Int          { MAX_EXPON }
+    public static var exponentBias: Int             { EXPONENT_BIAS }
+    public static var significandMaxDigitCount: Int { MAX_DIGITS }
     
     public var significandDigitCount: Int {
         guard let x = unpack() else { return -1 }
