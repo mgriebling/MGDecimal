@@ -103,11 +103,36 @@ func __L1_Split_MiDi_6_Lead( _ X:UInt64, _ ptr: inout [UInt32])  {
     }
 }
 
+func __L1_Split_MiDi_6( _ X:UInt64, _ ptr: inout [UInt32]) {
+    //BID_UINT32 L1_X_hi, L1_X_lo;
+    //BID_UINT64 L1_Xhi_64, L1_Xlo_64;
+    var L1_Xhi_64 = ((X>>28)*bid_Inv_Tento9) >> 33
+    var L1_Xlo_64 = X - L1_Xhi_64*UInt64(bid_Tento9)
+    if L1_Xlo_64 >= UInt64(bid_Tento9) {
+        L1_Xlo_64-=UInt64(bid_Tento9); L1_Xhi_64+=1
+    }
+    let L1_X_hi=UInt32(L1_Xhi_64); let L1_X_lo=UInt32(L1_Xlo_64)
+    __L0_Split_MiDi_3(L1_X_hi, &ptr)
+    __L0_Split_MiDi_3(L1_X_lo, &ptr)
+}
+
 func __L0_Normalize_10to18(_ X_hi:inout UInt64, _ X_lo:inout UInt64) {
     let L0_tmp = X_lo + bid_Twoto60_m_10to18
     if L0_tmp & bid_Twoto60 != 0 {
         X_hi=X_hi+1; X_lo=(L0_tmp<<4)>>4
     }
+}
+
+/*********************************************************************
+ *
+ *      Compare Macros
+ *
+ *********************************************************************/
+// greater than
+//  return 0 if A<=B
+//  non-zero if A>B
+func __unsigned_compare_gt_128(_ A:UInt128, _ B:UInt128) -> Bool {
+    (A.w[1]>B.w[1]) || ((A.w[1]==B.w[1]) && (A.w[0]>B.w[0]))
 }
 
 // Unpack decimal floating-point number x into sign,exponent,coefficient
@@ -351,6 +376,28 @@ func __mul_64x64_to_128(_ P: inout UInt128, _ CX:UInt64, _ CY:UInt64) {
 //    PM2 = CXL*CYH;
 //    PH += (PM>>32);
 //    PM = (BID_UINT64)((BID_UINT32)PM)+PM2+(PL>>32);
+//
+//    (P).w[1] = PH + (PM>>32);
+//    (P).w[0] = (PM<<32)+(BID_UINT32)PL;
+}
+
+// get full 64x64bit product
+// Note:
+// This macro is used for CX < 2^61, CY < 2^61
+//
+func __mul_64x64_to_128_fast(_ P: inout UInt128, _ CX:UInt64, _ CY:UInt64) {
+    let res = CX.multipliedFullWidth(by: CY)
+    P.w[1] = res.high; P.w[0] = res.low
+//    CXH = (CX) >> 32;
+//    CXL = (BID_UINT32)(CX);
+//    CYH = (CY) >> 32;
+//    CYL = (BID_UINT32)(CY);
+//
+//    PM = CXH*CYL;
+//    PL = CXL*CYL;
+//    PH = CXH*CYH;
+//    PM += CXL*CYH;
+//    PM += (PL>>32);
 //
 //    (P).w[1] = PH + (PM>>32);
 //    (P).w[0] = (PM<<32)+(BID_UINT32)PL;

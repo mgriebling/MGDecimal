@@ -85,4 +85,9 @@ final class MGDecimalTests: XCTestCase {
         print("123456789 -> \(y1)")
     }
     
+    func testDecimal128() throws {
+        let y1 = Decimal128(stringLiteral: "123456789"); XCTAssert(y1.description == "123456789")
+        print("123456789 -> \(y1)")
+    }
+    
 }
