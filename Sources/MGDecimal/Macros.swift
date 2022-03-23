@@ -165,13 +165,13 @@ func __unsigned_compare_gt_128(_ A:UInt128, _ B:UInt128) -> Bool {
     return nil
 }
 
-@inlinable func unpack_binary64(_ x:Double, _ s: inout Int, _ e: inout Int, _ c: inout UInt64, _ t: inout Int, _ status: inout Status) -> UInt64? {
+func unpack_binary64(_ x:Double, _ s: inout Int, _ e: inout Int, _ c: inout UInt64, _ t: inout Int, _ status: inout Status) -> UInt64? {
     let expMask = 1<<11 - 1
     e = Int(x.bitPattern >> 52) & expMask
     c = x.significandBitPattern
     s = x.sign == .minus ? 1 : 0
     if e == 0 {
-        if c == 0 { return UInt64(return_bid32_zero(s)) } // number = 0
+        if c == 0 { return return_bid64_zero(s) } // number = 0
         
         // denormalized number
         let l = clz64(c) - (64 - 53)
@@ -180,9 +180,9 @@ func __unsigned_compare_gt_128(_ A:UInt128, _ B:UInt128) -> Bool {
         t = 0
         status.insert(.subnormal)
     } else if e == expMask {
-        if c == 0 { return UInt64(return_bid32_inf(s)) } // number = infinity
+        if c == 0 { return return_bid64_inf(s) } // number = infinity
         status.insert(.invalidOperation)
-        return UInt64(return_bid32_nan(s, c << 13, 0))
+        return return_bid64_nan(s, c << 13, 0)
     } else {
         c |= 1 << 52  // set upper bit
         e -= 1075
@@ -204,10 +204,18 @@ func __unsigned_compare_gt_128(_ A:UInt128, _ B:UInt128) -> Bool {
   return_bid64(s, 0x1F<<5, (((c_hi>>14) > 999999999999999) ? 0 : Int(c_hi>>14)))
 }
 
+@inlinable func return_double_max(_ s:Int) -> Double { return_double(s,2046,(1<<52)-1) }
 @inlinable func return_double_zero(_ s:Int) -> Double { return_double(s, 0, 0) }
 @inlinable func return_double_inf(_ s:Int) -> Double { return_double(s, 2047, 0) }
 @inlinable func return_double_nan(_ s:Int, _ c_hi:UInt64, _ c_lo:UInt64) -> Double {
     return_double(s, 2047, (c_hi>>13)+(UInt64(1)<<51))
+}
+func return_double_ovf(_ s:Int, _ rnd_mode:Rounding) -> Double {
+    if (rnd_mode == BID_ROUNDING_TO_ZERO) || (rnd_mode == ((s != 0) ? BID_ROUNDING_UP : BID_ROUNDING_DOWN)) {
+        return return_double_max(s)
+    } else {
+        return return_double_inf(s)
+    }
 }
 
 @inlinable func return_double(_ s:Int, _ e:Int, _ c:UInt64) -> Double {
@@ -222,6 +230,16 @@ func return_bid32_ovf(_ s:Int) -> UInt32 {
     } else {
         return return_bid32_inf(s)
     }
+}
+
+let BID_LOW_128W = (BIG_ENDIAN != 0) ? 1 : 0
+let BID_HIGH_128W = (BIG_ENDIAN != 0) ? 0 : 1
+
+func return_bid128(_ s:Int, _ e:Int, _ c_hi:UInt64, _ c_lo:UInt64) -> UInt128 {
+    var x_out = UInt128()
+    x_out.w[BID_LOW_128W] = c_lo;
+    x_out.w[BID_HIGH_128W] = (UInt64(s) << 63) + (UInt64(e) << 49) + c_hi
+    return x_out
 }
 
 @inlinable func return_bid64(_ s:Int, _ e:Int, _ c:Int) -> UInt64 {
@@ -276,6 +294,16 @@ func __shr_128_long(_ Q:inout UInt128, _ A:UInt128, _ k:Int) {
     }
 }
 
+// Shift 4-part 2^196 * x3 + 2^128 * x2 + 2^64 * x1 + x0
+// right by "c" bits (must have c < 64)
+func srl256_short(_ x3:UInt64, _ x2:UInt64, _ x1:UInt64, _ x0:UInt64, _ c:Int) -> UInt256 {
+    let _x0 = (x1 << (64 - c)) + (x0 >> c)
+    let _x1 = (x2 << (64 - c)) + (x1 >> c)
+    let _x2 = (x3 << (64 - c)) + (x2 >> c)
+    let _x3 = x3 >> c
+    return UInt256(w: [_x0, _x1, _x2, _x3])
+}
+
 // Shift 2-part 2^64 * hi + lo right by "c" bits
 // The "short" form requires a shift 0 < c < 64 and will be faster
 // Note that shifts of 64 can't be relied on as ANSI
@@ -293,6 +321,16 @@ func srl128(_ hi:UInt64, _ lo:UInt64, _ c:Int) -> UInt128 {
     if c == 0 { return UInt128(w: [lo, hi]) }
     if c >= 64 { return UInt128(w: [hi >> (c - 64), 0]) }
     else { return srl128_short(hi, lo, c) }
+}
+
+func srl384_short(_ x5: UInt64, _ x4: UInt64, _ x3:UInt64, _ x2:UInt64, _ x1:UInt64, _ x0:UInt64, _ c:Int) -> UInt384 {
+    let _x0 = (x1 << (64 - c)) + (x0 >> c)
+    let _x1 = (x2 << (64 - c)) + (x1 >> c)
+    let _x2 = (x3 << (64 - c)) + (x2 >> c)
+    let _x3 = (x4 << (64 - c)) + (x3 >> c)
+    let _x4 = (x5 << (64 - c)) + (x4 >> c)
+    let _x5 = x5 >> c
+    return UInt384(w: [_x0, _x1, _x2, _x3, _x4, _x5])
 }
 
 // Compare "<" two 2-part unsigned integers
@@ -317,6 +355,10 @@ func __unsigned_compare_ge_128(_ A:UInt128, _ B:UInt128) -> Bool {
 
 // Counting leading zeros in an unsigned 64-bit word
 @inlinable func clz32(_ n:UInt32) -> Int { n.leadingZeroBitCount }
+
+// Counting leading zeros in an unsigned 2-part 128-bit word
+@inlinable func clz128(_ n_hi:UInt64, _ n_lo:UInt64) -> Int    { (n_hi == 0) ? 64 + clz64(n_lo) : clz64(n_hi) }
+@inlinable func clz128_nz(_ n_hi:UInt64, _ n_lo:UInt64) -> Int { (n_hi == 0) ? 64 + clz64(n_lo) : clz64(n_hi) }
 
 func __mul_64x256_to_320(_ P:inout UInt384, _ A:UInt64, _ B:UInt256) {
     var lP0=UInt128(), lP1=UInt128(), lP2=UInt128(), lP3=UInt128()
@@ -438,6 +480,54 @@ func __mul_128x128_low(_ Ql: inout UInt128, _ A:UInt128, _ B:UInt128) {
                                                   
     Ql.w[0] = ALBL.w[0];
     Ql.w[1] = QM64 + ALBL.w[1];
+}
+
+func __mul_256x256_to_512(_ P: inout UInt512, _ A:UInt256, _ B:UInt256) {
+    var P0=UInt384(), P1=UInt384(), P2=UInt384(), P3=UInt384(), CY=UInt64()
+    __mul_64x256_to_320(&P0, A.w[0], B)
+    __mul_64x256_to_320(&P1, A.w[1], B)
+    __mul_64x256_to_320(&P2, A.w[2], B)
+    __mul_64x256_to_320(&P3, A.w[3], B)
+    P.w[0] = P0.w[0]
+    __add_carry_out(&P.w[1],&CY,P1.w[0],P0.w[1])
+    __add_carry_in_out(&P.w[2],&CY,P1.w[1],P0.w[2],CY)
+    __add_carry_in_out(&P.w[3],&CY,P1.w[2],P0.w[3],CY)
+    __add_carry_in_out(&P.w[4],&CY,P1.w[3],P0.w[4],CY)
+    P.w[5] = P1.w[4] + CY
+    __add_carry_out(&P.w[2],&CY,P2.w[0],(P).w[2])
+    __add_carry_in_out(&P.w[3],&CY,P2.w[1],P.w[3],CY)
+    __add_carry_in_out(&P.w[4],&CY,P2.w[2],P.w[4],CY)
+    __add_carry_in_out(&P.w[5],&CY,P2.w[3],P.w[5],CY)
+    P.w[6] = P2.w[4] + CY
+    __add_carry_out(&P.w[3],&CY,P3.w[0],(P).w[3])
+    __add_carry_in_out(&P.w[4],&CY,P3.w[1],P.w[4],CY)
+    __add_carry_in_out(&P.w[5],&CY,P3.w[2],P.w[5],CY)
+    __add_carry_in_out(&P.w[6],&CY,P3.w[3],P.w[6],CY)
+    P.w[7] = P3.w[4] + CY
+}
+
+// Multiply a 64-bit number by 10, getting "carry" and "sum"
+
+func __mul_10x64(_ sum:inout UInt64,_ carryout:inout UInt64, _ input:UInt64, _ carryin:UInt64) {
+    var s3 = input + input >> 2
+    carryout = (s3 < UInt64(input) ? 1 : 0)<<3 + (s3>>61)
+    s3 = (s3<<3) + ((input&3)<<1)
+    sum = s3 + carryin
+    if (UInt64(sum) < s3) { carryout += 1 }
+}
+
+// Likewise a 384-bit number
+
+func __mul_10x384_to_384(_ a5:UInt64, _ a4:UInt64, _ a3:UInt64, _ a2:UInt64, _ a1:UInt64, _ a0:UInt64) -> UInt384 {
+    var p5=UInt64(), p4=UInt64(), p3=UInt64(), p2=UInt64(), p1=UInt64(), p0=UInt64()
+    var c0=UInt64(), c1=UInt64(), c2=UInt64(), c3=UInt64(), c4=UInt64(), c5=UInt64()
+    __mul_10x64(&p0,&c0,a0,0)
+    __mul_10x64(&p1,&c1,a1,c0)
+    __mul_10x64(&p2,&c2,a2,c1)
+    __mul_10x64(&p3,&c3,a3,c2)
+    __mul_10x64(&p4,&c4,a4,c3)
+    __mul_10x64(&p5,&c5,a5,c4)
+    return UInt384(w: [p0, p1, p2, p3, p4, p5])
 }
 
 /*********************************************************************

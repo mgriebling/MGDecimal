@@ -1103,4 +1103,57 @@ extension Decimal32 {
         return res
     }
     
+    /*
+     * Takes a BID32 as input and converts it to a BID128 and returns it.
+     */
+    static func bid32_to_bid128(_ x:UInt32, _ pfpsc: inout Status) -> UInt128 {
+        var sign_x = UInt32(), exponent_x = 0, coefficient_x = UInt32()
+        var res = UInt128()
+        if !unpack_BID32 (&sign_x, &exponent_x, &coefficient_x, x) {
+            if (x & 0x78000000) == 0x78000000 {
+                if (x & 0x7e000000) == 0x7e000000 {
+                    // sNaN
+                    pfpsc.insert(.invalidOperation)
+                }
+                res.w[0] = UInt64(coefficient_x & 0x000fffff)
+                __mul_64x128_low(&res, res.w[0], bid_power10_table_128[27])
+                res.w[1] |= ((UInt64(coefficient_x) << 32) & 0xfc00000000000000)
+                return res
+            }
+        }
+        var new_coeff = UInt128()
+        new_coeff.w[0] = UInt64(coefficient_x)
+        new_coeff.w[1] = 0
+        return Decimal128.bid_get_BID128_very_fast(UInt64(sign_x) << 32,
+                                exponent_x + Decimal128.DECIMAL_EXPONENT_BIAS_128 - EXPONENT_BIAS, new_coeff)
+    }    // convert_bid32_to_bid128
+    
+    /*
+     * Takes a BID32 as input and converts it to a BID64 and returns it.
+     */
+    static func bid32_to_bid64(_ x:UInt32, _ pfpsf: inout Status) -> UInt64 {
+        //
+        //         BID_UINT64 res;
+        //         BID_UINT32 sign_x;
+        //         int exponent_x;
+        //         BID_UINT32 coefficient_x;
+        var sign_x = UInt32(), exponent_x = 0, coefficient_x = UInt32()
+        var res = UInt64()
+        if !unpack_BID32 (&sign_x, &exponent_x, &coefficient_x, x) {
+            // Inf, NaN, 0
+            if (x & 0x78000000) == 0x78000000 {
+                if (x & 0x7e000000) == 0x7e00000 {    // sNaN
+                    pfpsf.insert(.invalidOperation)
+                }
+                res = UInt64(coefficient_x & 0x000fffff)
+                res *= 1000000000
+                res |= (UInt64(coefficient_x) << 32) & 0xfc00000000000000
+                return res
+            }
+        }
+        return Decimal64.very_fast_get_BID64_small_mantissa(UInt64(sign_x) << 32,
+                                            exponent_x + Decimal64.DECIMAL_EXPONENT_BIAS - EXPONENT_BIAS,
+                                            UInt64(coefficient_x))
+    }    // convert_bid32_to_bid64
+    
 }

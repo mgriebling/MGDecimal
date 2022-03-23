@@ -1,8 +1,9 @@
 import Foundation
 
 /// Decimal128 implementation according to IEEE 754.
-/// A UInt128 implementation is included as part of this library.
-public struct Decimal128 : ExpressibleByStringLiteral, CustomStringConvertible {
+/// A UInt128 implementation is included as part of this library. (maybe)
+public struct Decimal128 : ExpressibleByStringLiteral, ExpressibleByFloatLiteral, CustomStringConvertible,
+                           ExpressibleByIntegerLiteral {
 
     private static var enableStateOutput = false   // set to true to monitor variable state (i.e., invalid operations, etc.)
     
@@ -20,6 +21,17 @@ public struct Decimal128 : ExpressibleByStringLiteral, CustomStringConvertible {
     public init(stringLiteral value: String) {
         x = Decimal128.bid128_from_string(value, Decimal128.rounding, &Decimal128.state)
     }
+    
+    public init(floatLiteral value: Double) {
+        x = Decimal128.double_to_bid128(value, Decimal128.rounding, &Decimal128.state)
+    }
+    
+    public init(integerLiteral value: Int) {
+        x = Decimal128.bid128_from_int64(Int64(value))
+    }
+    
+    public init(_ value: Decimal64) { x = Decimal64.bid64_to_bid128(value.x, &Decimal128.state) }
+    public init(_ value: Decimal32) { x = Decimal32.bid32_to_bid128(value.x, &Decimal128.state) }
     
     public var description: String { Decimal128.bid128_to_string(x) }
     

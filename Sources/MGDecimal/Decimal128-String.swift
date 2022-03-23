@@ -41,12 +41,12 @@ extension Decimal128 {
             if (x.w[1] & MASK_STEERING_BITS) == MASK_STEERING_BITS {
                 x_exp = (x.w[1]<<2) & MASK_EXP // biased and shifted left 49 bit positions
             }
+            C1.w[1] = x.w[1] & MASK_COEFF
             C1.w[0] = x.w[0]
             
             // determine coefficient"s representation as a decimal string
             // if zero or non-canonical, set coefficient to "0"
-            if (C1.w[1] > 0x0001ed09bead87c0) ||
-               (C1.w[1] == 0x0001ed09bead87c0 && C1.w[0] > 0x378d8e63ffffffff) ||
+            if (C1.w[1] > 0x0001ed09bead87c0) || (C1.w[1] == 0x0001ed09bead87c0 && C1.w[0] > 0x378d8e63ffffffff) ||
                (x.w[1] & MASK_STEERING_BITS) == MASK_STEERING_BITS || (C1.w[1] == 0 && C1.w[0] == 0) {
                 str += "0"
             } else {
@@ -416,7 +416,7 @@ extension Decimal128 {
             var carry = UInt64(0)
             switch rnd_mode {
                 case BID_ROUNDING_TO_NEAREST:
-                    carry = (4 - dbuffer[iv]) >> 31
+                    carry = (4 &- dbuffer[iv]) >> 31
                     if ((dbuffer[iv] == 5 && (coeff_low & 1 == 0)) || dec_expon < 0) {
                         if dec_expon >= 0 {
                             carry = 0
@@ -467,7 +467,7 @@ extension Decimal128 {
             }
             
             // now form the coefficient as coeff_high*10^17+coeff_low+carry
-            var scale_high = UInt64(100000000000000000)
+            var scale_high = UInt64(100_000_000_000_000_000)
             if dec_expon < 0 {
                 if dec_expon > -MAX_FORMAT_DIGITS_128 {
                     scale_high = 1000000000000000000

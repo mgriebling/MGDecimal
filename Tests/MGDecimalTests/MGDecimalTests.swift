@@ -4,8 +4,9 @@ import XCTest
 final class MGDecimalTests: XCTestCase {
     
     func testDecimal32() throws {
-        let y1 = Decimal32(stringLiteral: "123456789"); XCTAssert(y1.description == "1.234568e+8")
-        print("123456789 -> \(y1)")
+        let s = "123456789"
+        let y1 = Decimal32(stringLiteral: s); XCTAssert(y1.description == "1.234568e+8")
+        print("\(s) -> \(y1)")
         let y = Decimal32(stringLiteral: "234.5"); XCTAssert(y.description == "234.5")
         let x = Decimal32(stringLiteral: "345.5"); XCTAssert(x.description == "345.5")
         let n = UInt32(0xA23003D0)
@@ -53,13 +54,12 @@ final class MGDecimalTests: XCTestCase {
         print("Decimal32.infinity =", Decimal32.infinity); XCTAssert(Decimal32.infinity.description == "Inf")
         
         var a1 = Decimal32("8.625"); let b1 = Decimal32("0.75")
-        a1.formRemainder(dividingBy: b1)
-        print("\(a1).formRemainder(dividingBy: \(b1) = ", a1)
-        XCTAssert(a1 == Decimal32("-0.375"))
+        let rem = a1.remainder(dividingBy: b1)
+        print("\(a1).formRemainder(dividingBy: \(b1) = ", rem)
+        XCTAssert(rem == Decimal32("-0.375"))
         a1 = Decimal32("8.625")
         let q = (a1/b1).rounded(.towardZero); print(q)
         a1 = a1 - q * b1
-//        a1.formTruncatingRemainder(dividingBy: b1)
         print("\(a1)")
         
         // Equivalent to the C 'round' function:
@@ -81,13 +81,15 @@ final class MGDecimalTests: XCTestCase {
     }
     
     func testDecimal64() throws {
-        let y1 = Decimal64(stringLiteral: "123456789"); XCTAssert(y1.description == "123456789")
-        print("123456789 -> \(y1)")
+        let s = "123456789012345678"
+        let y1 = Decimal64(stringLiteral: s); XCTAssert(y1.description == "1.234567890123457e+17")
+        print("\(s) -> \(y1)")
     }
     
     func testDecimal128() throws {
-        let y1 = Decimal128(stringLiteral: "123456789"); XCTAssert(y1.description == "123456789")
-        print("123456789 -> \(y1)")
+        let s = "12345678901234567890.12345678901234567890"
+        let y1 = Decimal128(stringLiteral: s); XCTAssert(y1.description == "12345678901234567890.12345678901235")
+        print("\(s) -> \(y1)")
     }
     
 }

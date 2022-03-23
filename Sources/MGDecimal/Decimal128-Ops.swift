@@ -6,3 +6,9 @@
 //
 
 import Foundation
+
+// These are the different, bipartite, tables for conversion to bid128
+// Using the same approach, the tables become extremely large
+// And things are more amenable here since there's never overflow/underflow
+
+

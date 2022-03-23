@@ -231,10 +231,10 @@ extension Decimal64 {
                 extra_digits+=1
             }
             
-            let rmode1 = roundboundIndex(rmode, sign_x != 0, 0)
-//            if sign_x != 0 && UInt(rmode1 - 1) < 2 {
-//                rmode1 = 3 - rmode1
-//            }
+            var rmode1 = roundboundIndex(rmode) >> 2
+            if sign_x != 0 && UInt(rmode1 - 1) < 2 {
+                rmode1 = 3 - rmode1
+            }
             
             exponent_x += extra_digits
             if (exponent_x < 0) && (exponent_x + Decimal32.MAX_DIGITS >= 0) {
@@ -303,10 +303,6 @@ extension Decimal64 {
     //   BID64 pack macro (general form)
     //
     static func get_BID64 (_ sgn:UInt64, _ expon:Int, _ coeff:UInt64, _ rmode:Rounding, _ fpsc: inout Status) -> UInt64 {
-        //      BID_UINT128 Stemp, Q_low;
-        //      BID_UINT64 QH, r, mask, _C64, remainder_h, CY, carry;
-        //      int extra_digits, amount, amount2;
-        //      unsigned status;
         var expon = expon
         var coeff = coeff
         
@@ -330,10 +326,10 @@ extension Decimal64 {
                     // result is 0
                     return sgn
                 }
-                let rmode1 = roundboundIndex(rmode, sgn != 0, 0)
-//                if (sgn && UInt(rmode - 1) < 2) {
-//                    rmode = 3 - rmode;
-//                }
+                var rmode1 = roundboundIndex(rmode) >> 2
+                if sgn != 0 && UInt(rmode1 - 1) < 2 {
+                    rmode1 = 3 - rmode1
+                }
                 
                 // get digits to be shifted out
                 let extra_digits = -expon
@@ -486,10 +482,10 @@ extension Decimal64 {
         }
         // 10*coeff
         coeff = (coeff << 3) + (coeff << 1)
-        let rmode1 = roundboundIndex(rmode, sgn != 0, 0)
-//        if (sgn && UInt(rmode - 1) < 2) {
-//            rmode = 3 - rmode;
-//        }
+        var rmode1 = roundboundIndex(rmode) >> 2
+        if sgn != 0 && UInt(rmode1 - 1) < 2 {
+            rmode1 = 3 - rmode1
+        }
         if R != 0 {
             coeff |= 1
         }
@@ -593,21 +589,21 @@ extension Decimal64 {
                     
                     // overflow
                     r = sgn | INFINITY_MASK64;
-                    switch (rmode) {
+                    switch rmode {
                         case BID_ROUNDING_DOWN:
-                            if ((sgn == 0)) {
-                                r = LARGEST_BID64;
+                            if sgn == 0 {
+                                r = LARGEST_BID64
                             }
                         case BID_ROUNDING_TO_ZERO:
-                            r = sgn | LARGEST_BID64;
+                            r = sgn | LARGEST_BID64
                         case BID_ROUNDING_UP:
                             // round up
-                            if ((sgn) != 0) {
-                                r = SMALLEST_BID64;
+                            if sgn != 0 {
+                                r = SMALLEST_BID64
                             }
                         default: break
                     }
-                    return r;
+                    return r
                 }
             }
         }
@@ -617,9 +613,9 @@ extension Decimal64 {
         // check whether coefficient fits in 10*5+3 bits
         if coeff < mask {
             r = UInt64(expon)
-            r <<= EXPONENT_SHIFT_SMALL64;
-            r |= (coeff | sgn);
-            return r;
+            r <<= EXPONENT_SHIFT_SMALL64
+            r |= (coeff | sgn)
+            return r
         }
         // special format
         
@@ -642,17 +638,7 @@ extension Decimal64 {
     }
     
     // **********************************************************************
-    static func binary64_to_bid64 (_ x: Double, _ rmode:Rounding, _ fpsc: inout Status) -> UInt64 {
-        //      double x = *px;
-        
-        //      BID_UINT128 c;
-        //      BID_UINT64 c_prov;
-        //      BID_UINT128 m_min;
-        //      BID_UINT256 r;
-        //      BID_UINT384 z;
-        
-        //      int e, s, t, e_out;
-        
+    static func double_to_bid64 (_ x: Double, _ rmode:Rounding, _ fpsc: inout Status) -> UInt64 {
         // Unpack the input
         var s = 0, e = 0, c = UInt128(), t = 0
         if let res = unpack_binary64 (x, &s, &e, &c.w[1], &t, &fpsc) { return res }
@@ -748,10 +734,10 @@ extension Decimal64 {
         // If we spill over into the next decade, correct
         let rindex = roundboundIndex(rmode, s != 0, c_prov)
         if lt128(bid_roundbound_128[rindex].w[1], bid_roundbound_128[rindex].w[0], z.w[4], z.w[3]) {
-            c_prov = c_prov + 1;
+            c_prov = c_prov + 1
             if c_prov == 10000000000000000 {
                 c_prov = 1000000000000000
-                e_out = e_out + 1;
+                e_out = e_out + 1
             }
         }
         
@@ -765,9 +751,109 @@ extension Decimal64 {
         // Package up the result
         return return_bid64 (s, e_out, c_prov)
     }
-
-
     
+    static func bid64_from_int64(_ x: Int64, _ rnd_mode:Rounding, _ pfpsf: inout Status) -> UInt64 {
+        var res = UInt64()
+        let x_sign = x < 0 ? SIGN_MASK64 : 0
+        var C = UInt64(), q = 0, ind = 0
+        
+        // if the integer is negative, use the absolute value
+        C = x.magnitude
+        if C <= BID64_SIG_MAX {    // |C| <= 10^16-1 and the result is exact
+            if C < 0x0020000000000000 {    // C < 2^53
+                res = x_sign | 0x31c0000000000000 | C
+            } else {    // C >= 2^53
+                res = x_sign | 0x6c70000000000000 | (C & 0x0007ffffffffffff)
+            }
+        } else {    // |C| >= 10^16 and the result may be inexact
+            // the smallest |C| is 10^16 which has 17 decimal digits
+            // the largest |C| is 0x8000000000000000 = 9223372036854775808 w/ 19 digits
+            if C < 0x16345785d8a0000 {    // x < 10^17
+                q = 17
+                ind = 1    // number of digits to remove for q = 17
+            } else if C < 0xde0b6b3a7640000 {    // C < 10^18
+                q = 18
+                ind = 2    // number of digits to remove for q = 18
+            } else {    // C < 10^19
+                q = 19
+                ind = 3    // number of digits to remove for q = 19
+            }
+            
+            // overflow and underflow are not possible
+            // Note: performance can be improved by inlining this call
+            var is_midpoint_lt_even = false, is_midpoint_gt_even = false
+            var is_inexact_lt_midpoint = false, is_inexact_gt_midpoint = false
+            var incr_exp = 0
+            Decimal32.bid_round64_2_18(q, ind, C, &res, &incr_exp,
+                &is_midpoint_lt_even, &is_midpoint_gt_even, &is_inexact_lt_midpoint, &is_inexact_gt_midpoint)
+            if incr_exp != 0 {
+                ind+=1
+            }
+            
+            // set the inexact flag
+            if is_inexact_lt_midpoint || is_inexact_gt_midpoint || is_midpoint_lt_even || is_midpoint_gt_even {
+                pfpsf.insert(.inexact)
+            }
+            
+            // general correction from RN to RA, RM, RP, RZ; result uses ind for exp
+            if rnd_mode != BID_ROUNDING_TO_NEAREST {
+                if (x_sign == 0 && ((rnd_mode == BID_ROUNDING_UP && is_inexact_lt_midpoint) ||
+                   ((rnd_mode == BID_ROUNDING_TIES_AWAY || rnd_mode == BID_ROUNDING_UP) && is_midpoint_gt_even))) ||
+                    (x_sign != 0 && ((rnd_mode == BID_ROUNDING_DOWN && is_inexact_lt_midpoint) ||
+                   ((rnd_mode == BID_ROUNDING_TIES_AWAY || rnd_mode == BID_ROUNDING_DOWN) && is_midpoint_gt_even))) {
+                    res = res + 1
+                    if res == 0x002386f26fc10000 {  // res = 10^16 => rounding overflow
+                        res = 0x00038d7ea4c68000    // 10^15
+                        ind = ind + 1
+                    }
+                } else if (is_midpoint_lt_even || is_inexact_gt_midpoint) &&
+                           ((x_sign != 0 && (rnd_mode == BID_ROUNDING_UP || rnd_mode == BID_ROUNDING_TO_ZERO)) ||
+                            (x_sign == 0 && (rnd_mode == BID_ROUNDING_DOWN || rnd_mode == BID_ROUNDING_TO_ZERO))) {
+                    res = res - 1
+                    // check if we crossed into the lower decade
+                    if res == 0x00038d7ea4c67fff {  // 10^15 - 1
+                        res = 0x002386f26fc0ffff    // 10^16 - 1
+                        ind = ind - 1
+                    }
+                } else {
+                    // exact, the result is already correct
+                }
+            }
+            if res < 0x0020000000000000 {
+                // res < 2^53
+                res = x_sign | (UInt64(ind + 398) << 53) | res
+            } else {
+                // res >= 2^53
+                res = x_sign | 0x6000000000000000 | (UInt64(ind + 398) << 51) | (res & 0x0007ffffffffffff)
+            }
+        }
+        return res
+    }
+    
+    /*
+     * Takes a BID64 as input and converts it to a BID128 and returns it.
+     */
+    static func bid64_to_bid128( _ x:UInt64, _ pfpsf: inout Status) -> UInt128 {
+        var sign_x = UInt64(), exponent_x = 0, coefficient_x = UInt64()
+        var res = UInt128(), new_coeff = UInt128()
+        if !unpack_BID64 (&sign_x, &exponent_x, &coefficient_x, x) {
+            if (x << 1) >= 0xf000000000000000 {
+                if (x & SNAN_MASK64) == SNAN_MASK64 {   // sNaN
+                    pfpsf.insert(.invalidOperation)
+                }
+                res.w[0] = coefficient_x & 0x0003ffffffffffff
+                __mul_64x64_to_128(&res, res.w[0], bid_power10_table_128[18].w[0]);
+                res.w[1] |= coefficient_x & 0xfc00000000000000
+                return res
+            }
+        }
+        
+        new_coeff.w[0] = coefficient_x
+        new_coeff.w[1] = 0
+        return Decimal128.bid_get_BID128_very_fast(sign_x,
+                    exponent_x + Decimal128.DECIMAL_EXPONENT_BIAS_128 - DECIMAL_EXPONENT_BIAS, new_coeff)
+    }    // convert_bid64_to_bid128
+
 }
 
 
