@@ -7,8 +7,10 @@ final class MGDecimalTests: XCTestCase {
         let s = "123456789"
         let y1 = Decimal32(stringLiteral: s); XCTAssert(y1.description == "1.234568e+8")
         print("\(s) -> \(y1)")
+        
         let y = Decimal32(stringLiteral: "234.5"); XCTAssert(y.description == "234.5")
         let x = Decimal32(stringLiteral: "345.5"); XCTAssert(x.description == "345.5")
+        
         let n = UInt32(0xA23003D0)
         var a = Decimal32(dpd32: n); XCTAssert(a.description == "-7.50")
         print(a, a.dpd32 == n ? "a = n" : "a != n"); XCTAssert(a.dpd32 == n)
@@ -33,8 +35,9 @@ final class MGDecimalTests: XCTestCase {
         let c = Decimal32(signOf: a, magnitudeOf: b)
         print(c); XCTAssert((-b) == c)
         
-        a = Decimal32(sign: .plus, exponentBitPattern: 101, significandDigits: [1,2,3,4])
+        a = Decimal32(sign: .plus, exponentBitPattern: UInt32(bias), significandDigits: [1,2,3,4])
         print(a); XCTAssert(a.description == "1234")
+        
         a = Decimal32.random(in: 1..<1000)
         print(a); XCTAssert(a >= Decimal32(1) && a < Decimal32(1000))
         
@@ -84,12 +87,20 @@ final class MGDecimalTests: XCTestCase {
         let s = "123456789012345678"
         let y1 = Decimal64(stringLiteral: s); XCTAssert(y1.description == "1.234567890123457e+17")
         print("\(s) -> \(y1)")
+        
+        let n = UInt64(0xA2300000000003D0)
+        let a = Decimal64(dpd64: n); XCTAssert(a.description == "-7.50")
+        print(a, a.dpd64 == n ? "a = n" : "a != n"); XCTAssert(a.dpd64 == n)
     }
     
     func testDecimal128() throws {
         let s = "12345678901234567890.12345678901234567890"
         let y1 = Decimal128(stringLiteral: s); XCTAssert(y1.description == "12345678901234567890.12345678901235")
         print("\(s) -> \(y1)")
+        
+        let n = UInt128(upper: 0xA207_8000_0000_0000, lower:0x0000_0000_0000_03D0)
+        let a = Decimal128(dpd128: n); XCTAssert(a.description == "-7.50")
+        print(a, a.dpd128, a.dpd128 == n ? "a = n" : "a != n"); XCTAssert(a.dpd128 == n)
     }
     
 }

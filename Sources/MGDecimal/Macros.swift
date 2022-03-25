@@ -19,17 +19,20 @@ let BID_ROUNDING_TIES_AWAY = Rounding.toNearestOrAwayFromZero
 struct UInt512 { var w = [UInt64](repeating: 0, count: 8) }
 struct UInt384 { var w = [UInt64](repeating: 0, count: 6) }
 struct UInt256 { var w = [UInt64](repeating: 0, count: 4) }
-struct UInt128 { var w = [UInt64](repeating: 0, count: 2) }
+
+var isBigEndian: Bool { let one=1; return one == one.bigEndian }
 
 func BID_SWAP128(_ x: inout UInt128) {
-    let one = 1
-    if one == one.bigEndian {
-        // swap 128 bit
+    if isBigEndian {
+        // swap 64-bit words
         let sw = x.w[1]
         x.w[1] = x.w[0]
         x.w[0] = sw
     }
 }
+
+let BID_LOW_128W = isBigEndian ? 1 : 0
+let BID_HIGH_128W = isBigEndian ? 0 : 1
 
 func __L0_MiDi2Str_Lead(_ X:UInt32, _ c_ptr : inout String) {
     var L0_src = bid_midi_tbl[Int(X)]
@@ -165,6 +168,55 @@ func __unsigned_compare_gt_128(_ A:UInt128, _ B:UInt128) -> Bool {
     return nil
 }
 
+func unpack_bid64(_ x:UInt64, _ s: inout Int, _ e: inout Int, _ k: inout Int, _ c: inout UInt64, _ status: inout Status) -> Double? {
+    s = Int(x >> 63)
+    if ((x & (3<<61)) == (3<<61)) {
+        if ((x & (0xF<<59)) == (0xF<<59)) {
+            if ((x & (0x1F<<58)) != (0x1F<<58)) { return return_double_inf(s) }
+            if ((x & (1<<57)) != 0) { status.insert(.invalidOperation) }
+            return return_double_nan(s,(((x & 0x3FFFFFFFFFFFF) > 999999999999999) ? 0 : (UInt64(x) << 14)), 0)
+        }
+        e = Int((x >> 51) & ((1<<10)-1)) - 398
+        c = (1<<53) + (x & ((1<<51)-1))
+        if c > 9999999999999999 { return return_double_zero(s) }
+        k = 0
+    } else {
+        e = Int((x >> 53) & ((1<<10)-1)) - 398
+        c = x & ((1<<53)-1)
+        if c == 0 { return return_double_zero(s) }
+        k = clz64(c) - 10
+        c = c << k
+    }
+    return nil
+}
+
+func unpack_bid128(_ x:UInt128, _ s: inout Int, _ e: inout Int, _ k: inout Int, _ c: inout UInt128, _ status: inout Status) -> Double? {
+    s = Int(x.w[BID_HIGH_128W] >> 63)
+    if ((x.w[BID_HIGH_128W] & (3<<61)) == (3<<61)) {
+        if ((x.w[BID_HIGH_128W] & (0xF<<59)) == (0xF<<59)) {
+            if ((x.w[BID_HIGH_128W] & (0x1F<<58)) != (0x1F<<58)) { return return_double_inf(s) }
+            if ((x.w[BID_HIGH_128W] & (1<<57)) != 0) {
+                status.insert(.invalidOperation)
+            }
+            if lt128(54210108624275,4089650035136921599, x.w[BID_HIGH_128W] & 0x3FFFFFFFFFFF, x.w[BID_LOW_128W]) {
+                return return_double_nan(s,0,0)
+            }
+            return return_double_nan(s, x.w[BID_HIGH_128W] << 18 + x.w[BID_LOW_128W] >> 46, x.w[BID_LOW_128W] << 18)
+        }
+        return return_double_zero(s)
+    } else {
+        e = Int((x.w[BID_HIGH_128W] >> 49) & ((1<<14)-1)) - 6176;
+        c.w[1] = x.w[BID_HIGH_128W] & ((1<<49)-1);
+        c.w[0] = x.w[BID_LOW_128W];
+        if lt128(542101086242752,4003012203950112767,c.w[1],c.w[0]) { c.w[1] = 0; c.w[0] = 0 }
+        if (c.w[1] == 0) && (c.w[0] == 0) { return return_double_zero(s) }
+        k = clz128_nz(c.w[1],c.w[0]) - 15
+        c = sll128(c.w[1], c.w[0], k)
+        return nil
+    }
+}
+
+
 func unpack_binary64(_ x:Double, _ s: inout Int, _ e: inout Int, _ c: inout UInt64, _ t: inout Int, _ status: inout Status) -> UInt64? {
     let expMask = 1<<11 - 1
     e = Int(x.bitPattern >> 52) & expMask
@@ -232,12 +284,9 @@ func return_bid32_ovf(_ s:Int) -> UInt32 {
     }
 }
 
-let BID_LOW_128W = (BIG_ENDIAN != 0) ? 1 : 0
-let BID_HIGH_128W = (BIG_ENDIAN != 0) ? 0 : 1
-
 func return_bid128(_ s:Int, _ e:Int, _ c_hi:UInt64, _ c_lo:UInt64) -> UInt128 {
     var x_out = UInt128()
-    x_out.w[BID_LOW_128W] = c_lo;
+    x_out.w[BID_LOW_128W] = c_lo
     x_out.w[BID_HIGH_128W] = (UInt64(s) << 63) + (UInt64(e) << 49) + c_hi
     return x_out
 }
@@ -473,6 +522,19 @@ func __mul_128x128_full(_ Qh:inout UInt128, _ Ql:inout UInt128, _ A:UInt128, _ B
     Ql.w[1] = QM2.w[0];
 }
 
+func __mul_128x128_high(_ Q:inout UInt128, _ A:UInt128, _ B:UInt128) {
+    var ALBL=UInt128(), ALBH=UInt128(), AHBL=UInt128(), AHBH=UInt128(), QM=UInt128(), QM2=UInt128()
+    
+    __mul_64x64_to_128(&ALBH, A.w[0], B.w[1])
+    __mul_64x64_to_128(&AHBL, B.w[0], A.w[1])
+    __mul_64x64_to_128(&ALBL, A.w[0], B.w[0])
+    __mul_64x64_to_128(&AHBH, A.w[1], B.w[1])
+    
+    __add_128_128(&QM, ALBH, AHBL)
+    __add_128_64(&QM2, QM, ALBL.w[1])
+    __add_128_64(&Q, AHBH, QM2.w[1])
+}
+
 func __mul_128x128_low(_ Ql: inout UInt128, _ A:UInt128, _ B:UInt128) {
     var ALBL:UInt128 = UInt128(w: [0,0])
     __mul_64x64_to_128(&ALBL, A.w[0], B.w[0]);
@@ -530,6 +592,24 @@ func __mul_10x384_to_384(_ a5:UInt64, _ a4:UInt64, _ a3:UInt64, _ a2:UInt64, _ a
     return UInt384(w: [p0, p1, p2, p3, p4, p5])
 }
 
+func __mul_128x128_to_256(_ P256: inout UInt256, _ A:UInt128, _ B:UInt128) {
+    var Qll = UInt128(), Qlh = UInt128()
+    var Phl = UInt64(), Phh = UInt64(), CY1 = UInt64(), CY2 = UInt64()
+    
+    __mul_64x128_full(&Phl, &Qll, A.w[0], B)
+    __mul_64x128_full(&Phh, &Qlh, A.w[1], B)
+    P256.w[0] = Qll.w[0]
+    __add_carry_out(&P256.w[1], &CY1, Qlh.w[0], Qll.w[1])
+    __add_carry_in_out(&P256.w[2], &CY2, Qlh.w[1], Phl, CY1)
+    P256.w[3] = Phh + CY2
+}
+
+func __mul_128x64_to_128(_ Q128: inout UInt128, _ A64:UInt64, _ B128:UInt128) {
+  let ALBH_L = A64 * B128.w[1]
+  __mul_64x64_to_128MACH(&Q128, A64, B128.w[0])
+  Q128.w[1] += ALBH_L
+}
+
 /*********************************************************************
  *
  *      Add/Subtract Macros
@@ -538,11 +618,22 @@ func __mul_10x384_to_384(_ a5:UInt64, _ a4:UInt64, _ a3:UInt64, _ a2:UInt64, _ a
 // add 64-bit value to 128-bit
 func __add_128_64(_ R128:inout UInt128, _ A128:UInt128, _ B64:UInt64) {
     var R64H = A128.w[1]
-    R128.w[0] = B64 + A128.w[0]
+    R128.w[0] = B64 &+ A128.w[0]
     if R128.w[0] < B64 {
         R64H += 1
     }
     R128.w[1] = R64H
+}
+
+func __sub_128_128(_ R128:inout UInt128, _ A128:UInt128, _ B128:UInt128) {
+    var Q128 = UInt128()
+    Q128.w[1] = A128.w[1] - B128.w[1]
+    Q128.w[0] = A128.w[0] - B128.w[0]
+    if A128.w[0] < B128.w[0] {
+        Q128.w[1] -= 1
+    }
+    R128.w[1] = Q128.w[1]
+    R128.w[0] = Q128.w[0]
 }
 
 // add 128-bit value to 128-bit
@@ -550,7 +641,7 @@ func __add_128_64(_ R128:inout UInt128, _ A128:UInt128, _ B64:UInt64) {
 func __add_128_128(_ R128:inout UInt128, _ A128:UInt128, _ B128:UInt128) {
     var Q128 = UInt128()
     Q128.w[1] = A128.w[1] + B128.w[1]
-    Q128.w[0] = B128.w[0] + A128.w[0]
+    Q128.w[0] = B128.w[0] &+ A128.w[0]
     if Q128.w[0] < B128.w[0] {
         Q128.w[1] += 1
     }

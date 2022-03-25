@@ -35,12 +35,12 @@ extension Decimal128 {
     static let MASK_COEFF               = UInt64(0x0001_ffff_ffff_ffff)
     static let SPECIAL_ENCODING_MASK64  = Decimal64.SPECIAL_ENCODING_MASK64
     static let MASK_STEERING_BITS       = Decimal64.MASK_STEERING_BITS
-    static let MASK_EXP                 = UInt64(0x7ffe000000000000)
+    static let MASK_EXP                 = UInt64(0x7ffe_0000_0000_0000)
     
     /*
      * Takes a BID128 as input and converts it to a BID32 and returns it.
      */
-    static func BID128_to_BID32 (_ x: UInt128, _ rmode: Rounding, _ pfpsf: inout Status) -> UInt32 {
+    static func bid128_to_bid32 (_ x: UInt128, _ rmode: Rounding, _ pfpsf: inout Status) -> UInt32 {
         var x = x
         BID_SWAP128(&x)
         // unpack arguments, check for NaN or Infinity or 0
@@ -91,9 +91,9 @@ extension Decimal128 {
             exponent_x += extra_digits
             
             var rmode1 = roundboundIndex(rmode, sign_x != 0, 0)
-//            if (sign_x && (unsigned) (rmode - 1) < 2) {
-//                rmode = 3 - rmode;
-//            }
+            if (sign_x != 0 && UInt(rmode1 - 1) < 2) {
+                rmode1 = 3 - rmode1
+            }
             
             var uf_check = false
             var carry = UInt64(), CX1 = UInt128(), T128 = UInt128()
@@ -727,160 +727,160 @@ extension Decimal128 {
         return pres
     }
     
-    /*
-     * Takes a BID128 as input and converts it to a BID32 and returns it.
-     */
-    static func bid128_to_bid32(_ x:UInt128, _ rnd_mode:Rounding, _ pfpsf: inout Status) -> UInt32 {
-        var x = x, res = UInt32()
-        BID_SWAP128(&x)
-        
-        // unpack arguments, check for NaN or Infinity or 0
-        var sign_x = UInt64(), exponent_x = 0, CX = UInt128(), Tmp = UInt128(), Tmp1 = UInt128()
-        var TP128 = UInt128(), Qh = UInt128(), Ql = UInt128(), Qh1 = UInt128()
-        var uf_check = false
-        if !unpack_BID128_value (&sign_x, &exponent_x, &CX, x) {
-            if ((x.w[1]) & 0x7800000000000000) == 0x7800000000000000 {
-                Tmp.w[1] = CX.w[1] & 0x00003fffffffffff
-                Tmp.w[0] = CX.w[0]
-                TP128 = bid_reciprocals10_128[27]
-                __mul_128x128_full(&Qh, &Ql, Tmp, TP128)
-                let amount = bid_recip_scale[27] - 64
-                res = UInt32(((CX.w[1] >> 32) & 0xfc000000) | (Qh.w[1] >> amount))
-                if (x.w[1] & Decimal64.SNAN_MASK64) == Decimal64.SNAN_MASK64 {   // sNaN
-                    pfpsf.insert(.invalidOperation)
-                }
-                return res
-            }
-            // x is 0
-            exponent_x = exponent_x - DECIMAL_EXPONENT_BIAS_128 + Decimal32.EXPONENT_BIAS
-            if exponent_x < 0 {
-                exponent_x = 0
-            }
-            if exponent_x > Decimal32.MAX_EXPON { // DECIMAL_MAX_EXPON_32) {
-                exponent_x = Decimal32.MAX_EXPON
-            }
-            return UInt32(sign_x >> 32) | UInt32(exponent_x << 23)
-        }
-        
-        if (CX.w[1] != 0 || (CX.w[0] >= 10000000)) {
-            // find number of digits in coefficient
-            // 2^64
-            let f64 = Float(bitPattern: 0x5f800000)
-            // fx ~ CX
-            let fx = Float(CX.w[1]) * f64 + Float(CX.w[0])
-            let bin_expon_cx = Int((fx.bitPattern >> 23) & 0xff) - 0x7f
-            var extra_digits = Int(bid_estimate_decimal_digits[bin_expon_cx]) - 7
-            // scale = 38-estimate_decimal_digits[bin_expon_cx];
-            let D = CX.w[1] - bid_power10_index_binexp_128[bin_expon_cx].w[1]
-            if (D > 0 || (D == 0 && CX.w[0] >= bid_power10_index_binexp_128[bin_expon_cx].w[0])) {
-                extra_digits+=1
-            }
-            
-            exponent_x += extra_digits;
-            
-            var rmode = roundboundIndex(rnd_mode) >> 2
-            var carry = UInt64()
-            if (sign_x != 0 && UInt(rmode - 1) < 2) {
-                rmode = 3 - rmode;
-            }
-            if (exponent_x < DECIMAL_EXPONENT_BIAS_128 - Decimal32.EXPONENT_BIAS) {
-                uf_check = true
-                if -extra_digits + exponent_x - DECIMAL_EXPONENT_BIAS_128 + Decimal32.EXPONENT_BIAS + 35 >= 0 {
-                    if exponent_x == DECIMAL_EXPONENT_BIAS_128 - Decimal32.EXPONENT_BIAS - 1 {
-                        let T128 = bid_round_const_table_128[rmode][extra_digits]
-                        var CX1 = UInt128()
-                        __add_carry_out(&CX1.w[0], &carry, T128.w[0], CX.w[0]);
-                        CX1.w[1] = CX.w[1] + T128.w[1] + carry;
-                        if (__unsigned_compare_ge_128(CX1, bid_power10_table_128[extra_digits + 7])) {
-                            uf_check = false
-                        }
-                    }
-                    extra_digits = extra_digits + DECIMAL_EXPONENT_BIAS_128 - Decimal32.EXPONENT_BIAS - exponent_x;
-                    exponent_x = DECIMAL_EXPONENT_BIAS_128 - Decimal32.EXPONENT_BIAS
-                } else {
-                    rmode = roundboundIndex(BID_ROUNDING_TO_ZERO) >> 2
-                }
-            }
-            
-            let T128 = bid_round_const_table_128[rmode][extra_digits]
-            __add_carry_out(&CX.w[0], &carry, T128.w[0], CX.w[0])
-            CX.w[1] = CX.w[1] + T128.w[1] + carry
-            
-            TP128 = bid_reciprocals10_128[extra_digits]
-            __mul_128x128_full(&Qh, &Ql, CX, TP128)
-            let amount = bid_recip_scale[extra_digits]
-            
-            if (amount >= 64) {
-                CX.w[0] = Qh.w[1] >> (amount - 64)
-                CX.w[1] = 0
-            } else {
-                __shr_128(&CX, &Qh, amount)
-            }
-            
-            if rnd_mode != BID_ROUNDING_TO_NEAREST {
-                if (CX.w[0] & 1) != 0 {
-                    // check whether fractional part of initial_P/10^ed1 is exactly .5
-                    
-                    // get remainder
-                    __shl_128_long(&Qh1, Qh, (128 - amount));
-                    
-                    if (Qh1.w[1] == 0 && Qh1.w[0] == 0 &&
-                        (Ql.w[1] < bid_reciprocals10_128[extra_digits].w[1] ||
-                         (Ql.w[1] == bid_reciprocals10_128[extra_digits].w[1] &&
-                          Ql.w[0] < bid_reciprocals10_128[extra_digits].w[0]))) {
-                        CX.w[0]-=1
-                    }
-                }
-            }
-            
-            var status = Status.inexact
-            // get remainder
-            __shl_128_long(&Qh1, Qh, (128 - amount));
-            
-            switch rnd_mode {
-                case BID_ROUNDING_TO_NEAREST, BID_ROUNDING_TIES_AWAY:
-                    // test whether fractional part is 0
-                    if (Qh1.w[1] == 0x8000000000000000 && (Qh1.w[0] == 0)
-                        && (Ql.w[1] < bid_reciprocals10_128[extra_digits].w[1]
-                            || (Ql.w[1] == bid_reciprocals10_128[extra_digits].w[1]
-                                && Ql.w[0] < bid_reciprocals10_128[extra_digits].w[0]))) {
-                        status = []
-                    }
-                case BID_ROUNDING_DOWN, BID_ROUNDING_TO_ZERO:
-                    if (((Qh1.w[1] == 0)) && ((Qh1.w[0] == 0))
-                        && (Ql.w[1] < bid_reciprocals10_128[extra_digits].w[1]
-                            || (Ql.w[1] == bid_reciprocals10_128[extra_digits].w[1]
-                                && Ql.w[0] < bid_reciprocals10_128[extra_digits].w[0]))) {
-                        status = []
-                    }
-                default:
-                    // round up
-                    var Stemp = UInt128(), cy = UInt64()
-                    __add_carry_out(&Stemp.w[0], &cy, Ql.w[0], bid_reciprocals10_128[extra_digits].w[0]);
-                    __add_carry_in_out(&Stemp.w[1], &carry, Ql.w[1], bid_reciprocals10_128[extra_digits].w[1], cy);
-                    __shr_128_long(&Qh, Qh1, (128 - amount))
-                    Tmp.w[0] = 1
-                    Tmp.w[1] = 0
-                    __shl_128_long(&Tmp1, Tmp, amount);
-                    Qh.w[0] += carry;
-                    if (Qh.w[0] < carry) {
-                        Qh.w[1]+=1
-                    }
-                    if __unsigned_compare_ge_128 (Qh, Tmp1) {
-                        status = []
-                    }
-            }
-            
-            if !status.isEmpty {
-                if uf_check {
-                    status.insert(.underflow)
-                }
-                pfpsf.formUnion(status)
-            }
-        }
-        return Decimal32.get_BID32 (UInt32(sign_x >> 32), exponent_x - DECIMAL_EXPONENT_BIAS_128 + Decimal32.EXPONENT_BIAS,
-                                    UInt32(CX.w[0]), rnd_mode, &pfpsf)
-    }
+//    /*
+//     * Takes a BID128 as input and converts it to a BID32 and returns it.
+//     */
+//    static func bid128_to_bid32(_ x:UInt128, _ rnd_mode:Rounding, _ pfpsf: inout Status) -> UInt32 {
+//        var x = x, res = UInt32()
+//        BID_SWAP128(&x)
+//        
+//        // unpack arguments, check for NaN or Infinity or 0
+//        var sign_x = UInt64(), exponent_x = 0, CX = UInt128(), Tmp = UInt128(), Tmp1 = UInt128()
+//        var TP128 = UInt128(), Qh = UInt128(), Ql = UInt128(), Qh1 = UInt128()
+//        var uf_check = false
+//        if !unpack_BID128_value (&sign_x, &exponent_x, &CX, x) {
+//            if ((x.w[1]) & 0x7800000000000000) == 0x7800000000000000 {
+//                Tmp.w[1] = CX.w[1] & 0x00003fffffffffff
+//                Tmp.w[0] = CX.w[0]
+//                TP128 = bid_reciprocals10_128[27]
+//                __mul_128x128_full(&Qh, &Ql, Tmp, TP128)
+//                let amount = bid_recip_scale[27] - 64
+//                res = UInt32(((CX.w[1] >> 32) & 0xfc000000) | (Qh.w[1] >> amount))
+//                if (x.w[1] & Decimal64.SNAN_MASK64) == Decimal64.SNAN_MASK64 {   // sNaN
+//                    pfpsf.insert(.invalidOperation)
+//                }
+//                return res
+//            }
+//            // x is 0
+//            exponent_x = exponent_x - DECIMAL_EXPONENT_BIAS_128 + Decimal32.EXPONENT_BIAS
+//            if exponent_x < 0 {
+//                exponent_x = 0
+//            }
+//            if exponent_x > Decimal32.MAX_EXPON { // DECIMAL_MAX_EXPON_32) {
+//                exponent_x = Decimal32.MAX_EXPON
+//            }
+//            return UInt32(sign_x >> 32) | UInt32(exponent_x << 23)
+//        }
+//        
+//        if (CX.w[1] != 0 || (CX.w[0] >= 10000000)) {
+//            // find number of digits in coefficient
+//            // 2^64
+//            let f64 = Float(bitPattern: 0x5f800000)
+//            // fx ~ CX
+//            let fx = Float(CX.w[1]) * f64 + Float(CX.w[0])
+//            let bin_expon_cx = Int((fx.bitPattern >> 23) & 0xff) - 0x7f
+//            var extra_digits = Int(bid_estimate_decimal_digits[bin_expon_cx]) - 7
+//            // scale = 38-estimate_decimal_digits[bin_expon_cx];
+//            let D = CX.w[1] - bid_power10_index_binexp_128[bin_expon_cx].w[1]
+//            if (D > 0 || (D == 0 && CX.w[0] >= bid_power10_index_binexp_128[bin_expon_cx].w[0])) {
+//                extra_digits+=1
+//            }
+//            
+//            exponent_x += extra_digits;
+//            
+//            var rmode = roundboundIndex(rnd_mode) >> 2
+//            var carry = UInt64()
+//            if (sign_x != 0 && UInt(rmode - 1) < 2) {
+//                rmode = 3 - rmode;
+//            }
+//            if (exponent_x < DECIMAL_EXPONENT_BIAS_128 - Decimal32.EXPONENT_BIAS) {
+//                uf_check = true
+//                if -extra_digits + exponent_x - DECIMAL_EXPONENT_BIAS_128 + Decimal32.EXPONENT_BIAS + 35 >= 0 {
+//                    if exponent_x == DECIMAL_EXPONENT_BIAS_128 - Decimal32.EXPONENT_BIAS - 1 {
+//                        let T128 = bid_round_const_table_128[rmode][extra_digits]
+//                        var CX1 = UInt128()
+//                        __add_carry_out(&CX1.w[0], &carry, T128.w[0], CX.w[0]);
+//                        CX1.w[1] = CX.w[1] + T128.w[1] + carry;
+//                        if (__unsigned_compare_ge_128(CX1, bid_power10_table_128[extra_digits + 7])) {
+//                            uf_check = false
+//                        }
+//                    }
+//                    extra_digits = extra_digits + DECIMAL_EXPONENT_BIAS_128 - Decimal32.EXPONENT_BIAS - exponent_x;
+//                    exponent_x = DECIMAL_EXPONENT_BIAS_128 - Decimal32.EXPONENT_BIAS
+//                } else {
+//                    rmode = roundboundIndex(BID_ROUNDING_TO_ZERO) >> 2
+//                }
+//            }
+//            
+//            let T128 = bid_round_const_table_128[rmode][extra_digits]
+//            __add_carry_out(&CX.w[0], &carry, T128.w[0], CX.w[0])
+//            CX.w[1] = CX.w[1] + T128.w[1] + carry
+//            
+//            TP128 = bid_reciprocals10_128[extra_digits]
+//            __mul_128x128_full(&Qh, &Ql, CX, TP128)
+//            let amount = bid_recip_scale[extra_digits]
+//            
+//            if (amount >= 64) {
+//                CX.w[0] = Qh.w[1] >> (amount - 64)
+//                CX.w[1] = 0
+//            } else {
+//                __shr_128(&CX, &Qh, amount)
+//            }
+//            
+//            if rnd_mode != BID_ROUNDING_TO_NEAREST {
+//                if (CX.w[0] & 1) != 0 {
+//                    // check whether fractional part of initial_P/10^ed1 is exactly .5
+//                    
+//                    // get remainder
+//                    __shl_128_long(&Qh1, Qh, (128 - amount));
+//                    
+//                    if (Qh1.w[1] == 0 && Qh1.w[0] == 0 &&
+//                        (Ql.w[1] < bid_reciprocals10_128[extra_digits].w[1] ||
+//                         (Ql.w[1] == bid_reciprocals10_128[extra_digits].w[1] &&
+//                          Ql.w[0] < bid_reciprocals10_128[extra_digits].w[0]))) {
+//                        CX.w[0]-=1
+//                    }
+//                }
+//            }
+//            
+//            var status = Status.inexact
+//            // get remainder
+//            __shl_128_long(&Qh1, Qh, (128 - amount));
+//            
+//            switch rnd_mode {
+//                case BID_ROUNDING_TO_NEAREST, BID_ROUNDING_TIES_AWAY:
+//                    // test whether fractional part is 0
+//                    if (Qh1.w[1] == 0x8000000000000000 && (Qh1.w[0] == 0)
+//                        && (Ql.w[1] < bid_reciprocals10_128[extra_digits].w[1]
+//                            || (Ql.w[1] == bid_reciprocals10_128[extra_digits].w[1]
+//                                && Ql.w[0] < bid_reciprocals10_128[extra_digits].w[0]))) {
+//                        status = []
+//                    }
+//                case BID_ROUNDING_DOWN, BID_ROUNDING_TO_ZERO:
+//                    if (((Qh1.w[1] == 0)) && ((Qh1.w[0] == 0))
+//                        && (Ql.w[1] < bid_reciprocals10_128[extra_digits].w[1]
+//                            || (Ql.w[1] == bid_reciprocals10_128[extra_digits].w[1]
+//                                && Ql.w[0] < bid_reciprocals10_128[extra_digits].w[0]))) {
+//                        status = []
+//                    }
+//                default:
+//                    // round up
+//                    var Stemp = UInt128(), cy = UInt64()
+//                    __add_carry_out(&Stemp.w[0], &cy, Ql.w[0], bid_reciprocals10_128[extra_digits].w[0]);
+//                    __add_carry_in_out(&Stemp.w[1], &carry, Ql.w[1], bid_reciprocals10_128[extra_digits].w[1], cy);
+//                    __shr_128_long(&Qh, Qh1, (128 - amount))
+//                    Tmp.w[0] = 1
+//                    Tmp.w[1] = 0
+//                    __shl_128_long(&Tmp1, Tmp, amount);
+//                    Qh.w[0] += carry;
+//                    if (Qh.w[0] < carry) {
+//                        Qh.w[1]+=1
+//                    }
+//                    if __unsigned_compare_ge_128 (Qh, Tmp1) {
+//                        status = []
+//                    }
+//            }
+//            
+//            if !status.isEmpty {
+//                if uf_check {
+//                    status.insert(.underflow)
+//                }
+//                pfpsf.formUnion(status)
+//            }
+//        }
+//        return Decimal32.get_BID32 (UInt32(sign_x >> 32), exponent_x - DECIMAL_EXPONENT_BIAS_128 + Decimal32.EXPONENT_BIAS,
+//                                    UInt32(CX.w[0]), rnd_mode, &pfpsf)
+//    }
     
     /*
      * Takes a BID128 as input and converts it to a BID64 and returns it.
@@ -1039,5 +1039,377 @@ extension Decimal128 {
         return Decimal64.get_BID64 (sign_x, exponent_x - DECIMAL_EXPONENT_BIAS_128 + Decimal64.DECIMAL_EXPONENT_BIAS,
                                     CX.w[0], rnd_mode, &pfpsf);
     }
+    
+    static func bid_to_dpd128 (_ ba:UInt128) -> UInt128 {
+        var nanb = UInt64(), res = UInt128(), sign = UInt128(), comb = UInt32(), exp = UInt32(), trailing = UInt128()
+        var bcoeff = UInt128(), dcoeff = UInt128()
+        
+        sign.w[1] = ba.w[BID_HIGH_128W] & MASK_SIGN
+        sign.w[0] = 0
+        comb = UInt32((ba.w[BID_HIGH_128W] & 0x7fffc00000000000) >> 46)
+        trailing.w[1] = ba.w[BID_HIGH_128W] & 0x00003fffffffffff
+        trailing.w[0] = ba.w[BID_LOW_128W]
+        exp = 0
+        
+        if (comb & 0x1f000) == 0x1e000 {    // G0..G4 = 11110 -> Inf
+            res.w[BID_HIGH_128W] = ba.w[BID_HIGH_128W] & 0xf800000000000000
+            res.w[BID_LOW_128W] = 0
+            return res
+            // Detect NaN, and canonicalize trailing
+        } else if (comb & 0x1f000) == 0x1f000 {
+            if (trailing.w[1] > 0x0000314dc6448d93) || ((trailing.w[1] == 0x0000314dc6448d93) && (trailing.w[0] >= 0x38c15b0a00000000)) {
+                // significand is non-canonical
+                trailing.w[1] = 0; trailing.w[0] = 0
+            }
+            bcoeff = trailing
+            nanb = ba.w[BID_HIGH_128W] & 0xfe00000000000000
+            exp = 0
+        } else {    // Normal number
+            if (comb & 0x18000) == 0x18000 {    // G0..G1 = 11 -> exp is G2..G11
+                exp = (comb >> 1) & 0x3fff
+                bcoeff.w[1] = (UInt64(8 + (comb & 1)) << 46) | trailing.w[1]
+                bcoeff.w[0] = trailing.w[0]
+            } else {
+                exp = (comb >> 3) & 0x3fff
+                bcoeff.w[1] = (UInt64(comb & 7) << 46) | trailing.w[1]
+                bcoeff.w[0] = trailing.w[0]
+            }
+            // Zero the coefficient if non-canonical (>= 10^34)
+            if bcoeff.w[1] > 0x1ed09bead87c0 || (bcoeff.w[1] == 0x1ed09bead87c0 && bcoeff.w[0] >= 0x378D8E6400000000) {
+                bcoeff.w[0] = 0; bcoeff.w[1] = 0
+            }
+        }
+        
+        // Constant 2^128 / 1000 + 1
+        var d1000 = UInt128(), b11 = UInt128(), b10 = UInt128(), b9 = UInt128(), b8 = UInt128()
+        var b7 = UInt128(), b6 = UInt128(), b5 = UInt128(), b4 = UInt128(), b3 = UInt128()
+        var b2 = UInt128(), b1 = UInt128(), t2 = UInt64(), t = UInt128()
+        var d0 = UInt128(), d1 = UInt128(), d2 = UInt128(), d3 = UInt128(), d4 = UInt128()
+        var d5 = UInt128(), d6 = UInt128(), d7 = UInt128(), d8 = UInt128(), d9 = UInt128()
+        var d10 = UInt128(), d11 = UInt128()
+        d1000.w[1] = 0x4189374BC6A7EF
+        d1000.w[0] = 0x9DB22D0E56041894
+        __mul_128x128_high (&b11, bcoeff, d1000);
+        __mul_128x128_high (&b10, b11, d1000);
+        __mul_128x128_high (&b9, b10, d1000);
+        __mul_128x128_high (&b8, b9, d1000);
+        __mul_128x128_high (&b7, b8, d1000);
+        __mul_128x128_high (&b6, b7, d1000);
+        __mul_128x128_high (&b5, b6, d1000);
+        __mul_128x128_high (&b4, b5, d1000);
+        __mul_128x128_high (&b3, b4, d1000);
+        __mul_128x128_high (&b2, b3, d1000);
+        __mul_128x128_high (&b1, b2, d1000);
+        
+        __mul_64x128_full (&t2, &t, 1000, b11);
+        __sub_128_128 (&d11, bcoeff, t);
+        __mul_64x128_full (&t2, &t, 1000, b10);
+        __sub_128_128 (&d10, b11, t);
+        __mul_64x128_full (&t2, &t, 1000, b9);
+        __sub_128_128 (&d9, b10, t);
+        __mul_64x128_full (&t2, &t, 1000, b8);
+        __sub_128_128 (&d8, b9, t);
+        __mul_64x128_full (&t2, &t, 1000, b7);
+        __sub_128_128 (&d7, b8, t);
+        __mul_64x128_full (&t2, &t, 1000, b6);
+        __sub_128_128 (&d6, b7, t);
+        __mul_64x128_full (&t2, &t, 1000, b5);
+        __sub_128_128 (&d5, b6, t);
+        __mul_64x128_full (&t2, &t, 1000, b4);
+        __sub_128_128 (&d4, b5, t);
+        __mul_64x128_full (&t2, &t, 1000, b3);
+        __sub_128_128 (&d3, b4, t);
+        __mul_64x128_full (&t2, &t, 1000, b2);
+        __sub_128_128 (&d2, b3, t);
+        __mul_64x128_full (&t2, &t, 1000, b1);
+        __sub_128_128 (&d1, b2, t);
+        d0 = b1
+        
+        dcoeff.w[0] = bid_b2d[Int(d11.w[0])] | (bid_b2d[Int(d10.w[0])] << 10) |
+            (bid_b2d[Int(d9.w[0])] << 20) | (bid_b2d[Int(d8.w[0])] << 30) | (bid_b2d[Int(d7.w[0])] << 40) |
+            (bid_b2d[Int(d6.w[0])] << 50) | (bid_b2d[Int(d5.w[0])] << 60);
+        dcoeff.w[1] = (bid_b2d[Int(d5.w[0])] >> 4) | (bid_b2d[Int(d4.w[0])] << 6) | (bid_b2d[Int(d3.w[0])] << 16) |
+            (bid_b2d[Int(d2.w[0])] << 26) | (bid_b2d[Int(d1.w[0])] << 36);
+        
+        res.w[0] = dcoeff.w[0]
+        if d0.w[0] >= 8 {
+            res.w[1] = sign.w[1] | ((UInt64(0x18000) | (UInt64(exp >> 12) << 13) | ((d0.w[0] & 1) << 12) | UInt64(exp & 0xfff)) << 46) | dcoeff.w[1];
+        } else {
+            res.w[1] = sign.w[1] | (((UInt64(exp >> 12) << 15) | (d0.w[0] << 12) | UInt64(exp & 0xfff)) << 46) | dcoeff.w[1];
+        }
+        
+        res.w[1] |= nanb
+        BID_SWAP128 (&res)
+        return res
+    }
+
+
+    static func dpd_to_bid128 (_ da:UInt128) -> UInt128 {
+        var sign = UInt128(), exp = UInt64(), comb = UInt64(), res = UInt128()
+        var trailing = UInt128(), nanb = UInt64(), d0 = UInt64(), bcoeff = UInt128()
+        sign.w[1] = da.w[BID_HIGH_128W] & 0x8000000000000000
+        sign.w[0] = 0
+        comb = (da.w[BID_HIGH_128W] & 0x7fffc00000000000) >> 46;
+        trailing.w[1] = da.w[BID_HIGH_128W] & 0x00003fffffffffff
+        trailing.w[0] = da.w[BID_LOW_128W]
+        exp = 0
+        
+        if ((comb & 0x1f000) == 0x1e000) {    // G0..G4 = 11110 -> Inf
+            res.w[BID_HIGH_128W] = da.w[BID_HIGH_128W] & 0xf800000000000000;
+            res.w[BID_LOW_128W] = 0;
+            return res
+        } else if ((comb & 0x1f000) == 0x1f000) {    // G0..G4 = 11111 -> NaN
+            nanb = da.w[BID_HIGH_128W] & 0xfe00000000000000;
+            exp = 0;
+            d0 = 0;
+        } else {    // Normal number
+            if ((comb & 0x18000) == 0x18000) {    // G0..G1 = 11 -> d0 = 8 + G4
+                d0 = 8 + (comb & 0x01000 != 0 ? 1 : 0);
+                exp = (comb & 0x04000 != 0 ? 1 : 0) * 0x2000 + (comb & 0x02000 != 0 ? 1 : 0) * 0x1000;
+                // exp leading bits are G2..G3
+            } else {
+                d0 = 4 * (comb & 0x04000 != 0 ? 1 : 0) + 2 * (comb & 0x2000 != 0 ? 1 : 0) + (comb & 0x1000 != 0 ? 1 : 0);
+                exp = (comb & 0x10000 != 0 ? 1 : 0) * 0x2000 + (comb & 0x08000 != 0 ? 1 : 0) * 0x1000;
+                // exp loading bits are G0..G1
+            }
+        }
+        
+        let d11 = bid_d2b[Int(trailing.w[0] & 0x3ff)]
+        let d10 = bid_d2b[Int(trailing.w[0] >> 10 & 0x3ff)]
+        let d9 =  bid_d2b[Int(trailing.w[0] >> 20) & 0x3ff]
+        let d8 =  bid_d2b[Int(trailing.w[0] >> 30) & 0x3ff]
+        let d7 =  bid_d2b[Int(trailing.w[0] >> 40) & 0x3ff]
+        let d6 =  bid_d2b[Int(trailing.w[0] >> 50) & 0x3ff]
+        let d5 =  bid_d2b[Int(trailing.w[0] >> 60) | ((Int(trailing.w[1]) & 0x3f) << 4)]
+        let d4 =  bid_d2b[Int(trailing.w[1] >> 6) & 0x3ff]
+        let d3 =  bid_d2b[Int(trailing.w[1] >> 16) & 0x3ff]
+        let d2 =  bid_d2b[Int(trailing.w[1] >> 26) & 0x3ff]
+        let d1 =  bid_d2b[Int(trailing.w[1] >> 36) & 0x3ff]
+        
+        let tl = d11 + (d10 * 1000) + (d9 * 1000000) + (d8 * 1000000000) + (d7 * 1000000000000) + (d6 * 1000000000000000)
+        let th = d5 + (d4 * 1000) + (d3 * 1000000) + (d2 * 1000000000) + (d1 * 1000000000000) + (d0 * 1000000000000000)
+        __mul_64x64_to_128 (&bcoeff, th, 1000000000000000000)
+        __add_128_64 (&bcoeff, bcoeff, tl)
+        
+        if nanb == 0 {
+            exp += comb & 0xfff
+        }
+        
+        res.w[0] = bcoeff.w[0]
+        res.w[1] = (exp << 49) | sign.w[1] | bcoeff.w[1]
+        res.w[1] |= nanb
+        
+        BID_SWAP128(&res)
+        return res
+    }
+    
+    /*****************************************************************************
+     *  BID128_to_int64_int
+     ****************************************************************************/
+    
+    static func bid128_to_int( _ x:UInt128, _ pfpsf: inout Status) -> Int {
+        // unpack x
+        let x_sign = x.w[1] & MASK_SIGN;    // 0 for positive, MASK_SIGN for negative
+        let x_exp = x.w[1] & MASK_EXP;    // biased and shifted left 49 bit positions
+        var C1 = UInt128(), C = UInt128(), res = 0, Cstar = UInt128(), P256 = UInt256()
+        C1.w[1] = x.w[1] & MASK_COEFF
+        C1.w[0] = x.w[0]
+        
+        // check for NaN or Infinity
+        if (x.w[1] & MASK_SPECIAL) == MASK_SPECIAL {
+            // x is special
+            if (x.w[1] & MASK_NAN) == MASK_NAN {    // x is NAN
+                if (x.w[1] & MASK_SNAN) == MASK_SNAN {    // x is SNAN
+                    // set invalid flag
+                    pfpsf.insert(.invalidOperation)
+                    // return Integer Indefinite
+                    res = Int(bitPattern: UInt(0x8000000000000000))
+                } else {    // x is QNaN
+                    // set invalid flag
+                    pfpsf.insert(.invalidOperation)
+                    // return Integer Indefinite
+                    res = Int(bitPattern: UInt(0x8000000000000000))
+                }
+                return res
+            } else {    // x is not a NaN, so it must be infinity
+                if x_sign == 0 {    // x is +inf
+                    // set invalid flag
+                    pfpsf.insert(.invalidOperation)
+                    // return Integer Indefinite
+                    res = Int(bitPattern: UInt(0x8000000000000000))
+                } else {    // x is -inf
+                    // set invalid flag
+                    pfpsf.insert(.invalidOperation)
+                    // return Integer Indefinite
+                    res = Int(bitPattern: UInt(0x8000000000000000))
+                }
+                return res
+            }
+        }
+        // check for non-canonical values (after the check for special values)
+        if ((C1.w[1] > 0x0001ed09bead87c0) || (C1.w[1] == 0x0001ed09bead87c0 && (C1.w[0] > 0x378d8e63ffffffff))
+            || ((x.w[1] & 0x6000000000000000) == 0x6000000000000000)) {
+            return 0x0000000000000000
+        } else if (C1.w[1] == 0) && (C1.w[0] == 0) {
+            // x is 0
+            return 0x0000000000000000
+        } else {    // x is not special and is not zero
+            
+            // q = nr. of decimal digits in x
+            //  determine first the nr. of bits in x
+            var x_nr_bits = 0, tmp1:Double
+            if (C1.w[1] == 0) {
+                if (C1.w[0] >= 0x0020000000000000) {    // x >= 2^53
+                    // split the 64-bit value in two 32-bit halves to avoid rounding errors
+                    tmp1 = Double(C1.w[0] >> 32)    // exact conversion
+                    x_nr_bits = 33 + ((Int(tmp1.bitPattern >> 52)) & 0x7ff) - 0x3ff
+                } else {    // if x < 2^53
+                    tmp1 = Double(C1.w[0])    // exact conversion
+                    x_nr_bits = 1 + ((Int(tmp1.bitPattern >> 52)) & 0x7ff) - 0x3ff
+                }
+            } else {    // C1.w[1] != 0 => nr. bits = 64 + nr_bits (C1.w[1])
+                tmp1 = Double(C1.w[1])    // exact conversion
+                x_nr_bits = 65 + ((Int(tmp1.bitPattern >> 52)) & 0x7ff) - 0x3ff
+            }
+            var q = Int(bid_nr_digits[x_nr_bits - 1].digits)
+            if q == 0 {
+                q = Int(bid_nr_digits[x_nr_bits - 1].digits1)
+                if (C1.w[1] > bid_nr_digits[x_nr_bits - 1].threshold_hi
+                    || (C1.w[1] == bid_nr_digits[x_nr_bits - 1].threshold_hi
+                        && C1.w[0] >= bid_nr_digits[x_nr_bits - 1].threshold_lo)) {
+                    q+=1
+                }
+            }
+            let exp = Int(x_exp >> 49) - 6176
+            if (q + exp) > 19 {    // x >= 10^19 ~= 2^63.11... (cannot fit in BID_SINT64)
+                // set invalid flag
+                pfpsf.insert(.invalidOperation)
+                // return Integer Indefinite
+                res = Int(bitPattern: UInt(0x8000000000000000))
+            } else if (q + exp) == 19 {    // x = c(0)c(1)...c(18).c(19)...c(q-1)
+                // in this case 2^63.11... ~= 10^19 <= x < 10^20 ~= 2^66.43...
+                // so x rounded to an integer may or may not fit in a signed 64-bit int
+                // the cases that do not fit are identified here; the ones that fit
+                // fall through and will be handled with other cases further,
+                // under '1 <= q + exp <= 19'
+                if x_sign != 0 {    // if n < 0 and q + exp = 19
+                    // if n <= -2^63 - 1 then n is too large
+                    // too large if c(0)c(1)...c(18).c(19)...c(q-1) >= 2^63+1
+                    // <=> 0.c(0)c(1)...c(q-1) * 10^20 >= 5*(2^64+2), 1<=q<=34
+                    // <=> 0.c(0)c(1)...c(q-1) * 10^20 >= 0x5000000000000000a, 1<=q<=34
+                    C.w[1] = 0x0000000000000005
+                    C.w[0] = 0x000000000000000a
+                    if q <= 19 {    // 1 <= q <= 19 => 1 <= 20-q <= 19 =>
+                        // 10^(20-q) is 64-bit, and so is C1
+                        __mul_64x64_to_128MACH(&C1, C1.w[0], bid_ten2k64[20 - q]);
+                    } else if q == 20 {
+                        // C1 * 10^0 = C1
+                    } else {    // if 21 <= q <= 34
+                        __mul_128x64_to_128(&C, bid_ten2k64[q - 20], C);    // max 47-bit x 67-bit
+                    }
+                    if C1.w[1] > C.w[1] || (C1.w[1] == C.w[1] && C1.w[0] >= C.w[0]) {
+                        // set invalid flag
+                        pfpsf.insert(.invalidOperation)
+                        // return Integer Indefinite
+                        res = Int(bitPattern: UInt(0x8000000000000000))
+                    }
+                    // else cases that can be rounded to a 64-bit int fall through
+                    // to '1 <= q + exp <= 19'
+                } else {    // if n > 0 and q + exp = 19
+                    // if n >= 2^63 then n is too large
+                    // too large if c(0)c(1)...c(18).c(19)...c(q-1) >= 2^63
+                    // <=> if 0.c(0)c(1)...c(q-1) * 10^20 >= 5*2^64, 1<=q<=34
+                    // <=> if 0.c(0)c(1)...c(q-1) * 10^20 >= 0x50000000000000000, 1<=q<=34
+                    C.w[1] = 0x0000000000000005;
+                    C.w[0] = 0x0000000000000000;
+                    if (q <= 19) {    // 1 <= q <= 19 => 1 <= 20-q <= 19 =>
+                        // 10^(20-q) is 64-bit, and so is C1
+                        __mul_64x64_to_128MACH(&C1, C1.w[0], bid_ten2k64[20 - q]);
+                    } else if (q == 20) {
+                        // C1 * 10^0 = C1
+                    } else {    // if 21 <= q <= 34
+                        __mul_128x64_to_128(&C, bid_ten2k64[q - 20], C);    // max 47-bit x 67-bit
+                    }
+                    if (C1.w[1] > C.w[1] || (C1.w[1] == C.w[1] && C1.w[0] >= C.w[0])) {
+                        // set invalid flag
+                        pfpsf.insert(.invalidOperation)
+                        // return Integer Indefinite
+                        res = Int(bitPattern: UInt(0x8000000000000000))
+                    }
+                    // else cases that can be rounded to a 64-bit int fall through
+                    // to '1 <= q + exp <= 19'
+                }
+            }
+            // n is not too large to be converted to int64: -2^63-1 < n < 2^63
+            // Note: some of the cases tested for above fall through to this point
+            // Restore C1 which may have been modified above
+            C1.w[1] = x.w[1] & MASK_COEFF
+            C1.w[0] = x.w[0]
+            if (q + exp) <= 0 {    // n = +/-0.[0...0]c(0)c(1)...c(q-1)
+                // return 0
+                return 0
+            } else {    // if (1 <= q + exp <= 19, 1 <= q <= 34, -33 <= exp <= 18)
+                // -2^63-1 < x <= -1 or 1 <= x < 2^63 so x can be rounded
+                // toward zero to a 64-bit signed integer
+                if exp < 0 {    // 2 <= q <= 34, -33 <= exp <= -1, 1 <= q + exp <= 19
+                    let ind = -exp    // 1 <= ind <= 33; ind is a synonym for 'x'
+                    // chop off ind digits from the lower part of C1
+                    // C1 fits in 127 bits
+                    // calculate C* and f*
+                    // C* is actually floor(C*) in this case
+                    // C* and f* need shifting and masking, as shown by
+                    // bid_shiftright128[] and bid_maskhigh128[]
+                    // 1 <= x <= 33
+                    // kx = 10^(-x) = bid_ten2mk128[ind - 1]
+                    // C* = C1 * 10^(-x)
+                    // the approximation of 10^(-x) was rounded up to 118 bits
+                    __mul_128x128_to_256 (&P256, C1, bid_ten2mk128[ind - 1]);
+                    if (ind - 1 <= 21) {    // 0 <= ind - 1 <= 21
+                        Cstar.w[1] = P256.w[3];
+                        Cstar.w[0] = P256.w[2];
+                    } else {    // 22 <= ind - 1 <= 33
+                        Cstar.w[1] = 0;
+                        Cstar.w[0] = P256.w[3];
+                    }
+                    // the top Ex bits of 10^(-x) are T* = bid_ten2mk128trunc[ind], e.g.
+                    // if x=1, T*=bid_ten2mk128trunc[0]=0x19999999999999999999999999999999
+                    // C* = floor(C*) (logical right shift; C has p decimal digits,
+                    //     correct by Property 1)
+                    // n = C* * 10^(e+x)
+                    
+                    // shift right C* by Ex-128 = bid_shiftright128[ind]
+                    let shift = bid_shiftright128[ind - 1];    // 0 <= shift <= 102
+                    if (ind - 1 <= 21) {    // 0 <= ind - 1 <= 21
+                        Cstar.w[0] = (Cstar.w[0] >> shift) | (Cstar.w[1] << (64 - shift));
+                        // redundant, it will be 0! Cstar.w[1] = (Cstar.w[1] >> shift);
+                    } else {    // 22 <= ind - 1 <= 33
+                        Cstar.w[0] = (Cstar.w[0] >> (shift - 64));    // 2 <= shift - 64 <= 38
+                    }
+                    if x_sign != 0 {
+                        res = -Int(Cstar.w[0])
+                    } else {
+                        res = Int(Cstar.w[0])
+                    }
+                } else if exp == 0 {
+                    // 1 <= q <= 19
+                    // res = +/-C (exact)
+                    if x_sign != 0 {
+                        res = -Int(C1.w[0])
+                    } else {
+                        res = Int(C1.w[0])
+                    }
+                } else {    // if (exp>0) => 1 <= exp <= 18, 1 <= q < 18, 2 <= q + exp <= 19
+                    // res = +/-C * 10^exp (exact) where this fits in 64-bit integer
+                    if x_sign != 0 {
+                        res = -Int(C1.w[0] * bid_ten2k64[exp])
+                    } else {
+                        res = Int(C1.w[0] * bid_ten2k64[exp])
+                    }
+                }
+            }
+        }
+        return res
+    }
+
 
 }

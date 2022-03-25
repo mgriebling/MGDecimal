@@ -56,12 +56,12 @@ public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, E
     }
     
     public init(_ value: Decimal64) {
-        x = Decimal64.BID64_to_BID32(value.x, Decimal32.rounding, &Decimal32.state)
+        x = Decimal64.bid64_to_bid32(value.x, Decimal32.rounding, &Decimal32.state)
         showState()
     }
     
     public init(_ value: Decimal128) {
-        x = Decimal128.BID128_to_BID32(value.x, Decimal32.rounding, &Decimal32.state)
+        x = Decimal128.bid128_to_bid32(value.x, Decimal32.rounding, &Decimal32.state)
         showState()
     }
     
@@ -120,7 +120,7 @@ extension Decimal32 : AdditiveArithmetic, Comparable, SignedNumeric, Strideable,
     public mutating func round(_ rule: FloatingPointRoundingRule) {
         let dec64 = Decimal64.BID32_to_BID64(x, &Decimal32.state)
         let res = Decimal64.bid64_round_integral_exact(dec64, rule, &Decimal32.state)
-        x = Decimal64.BID64_to_BID32(res, rule, &Decimal32.state)
+        x = Decimal64.bid64_to_bid32(res, rule, &Decimal32.state)
     }
     
     public mutating func formRemainder(dividingBy other: Decimal32) {

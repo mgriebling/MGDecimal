@@ -131,7 +131,7 @@ extension Decimal64 {
     static func BID32_to_BID64 (_ x: UInt32, _ pfpsf: inout Status) -> UInt64 {
         var sign_x = UInt32(0), coefficient_x = UInt32(0), exponent_x = 0
         var res: UInt64
-        if !Decimal32.unpack_BID32 (&sign_x, &exponent_x, &coefficient_x, x) {
+        if !Decimal32.unpack_BID32(&sign_x, &exponent_x, &coefficient_x, x) {
             // Inf, NaN, 0
             if (x & Decimal32.INFINITY_MASK32) == Decimal32.INFINITY_MASK32 {
                 if (x & Decimal32.SNAN_MASK32) == Decimal32.SNAN_MASK32 {    // sNaN
@@ -150,7 +150,7 @@ extension Decimal64 {
                                                   UInt64(coefficient_x))
     }    // convert_bid32_to_bid64
     
-    static func unpack_BID64 (_ psign_x:inout UInt64, _ pexponent_x:inout Int, _ pcoefficient_x:inout UInt64, _ x:UInt64) -> Bool {
+    static func unpack_BID64(_ psign_x:inout UInt64, _ pexponent_x:inout Int, _ pcoefficient_x:inout UInt64, _ x:UInt64) -> Bool {
         var tmp, coeff: UInt64
         psign_x = x & SIGN_MASK64
         
@@ -183,6 +183,7 @@ extension Decimal64 {
         // exponent
         tmp = x >> EXPONENT_SHIFT_SMALL64;
         pexponent_x = Int(tmp & UInt64(EXPONENT_MASK64))
+        
         // coefficient
         pcoefficient_x = (x & UInt64(SMALL_COEFF_MASK64))
         
@@ -192,7 +193,7 @@ extension Decimal64 {
     /*
      * Takes a BID64 as input and converts it to a BID32 and returns it.
      */
-    static func BID64_to_BID32 (_ x: UInt64, _ rmode: Rounding, _ pfpsf: inout Status) -> UInt32 {
+    static func bid64_to_bid32(_ x: UInt64, _ rmode: Rounding, _ pfpsf: inout Status) -> UInt32 {
         // BID_OPT_SAVE_BINARY_FLAGS()
         
         // unpack arguments, check for NaN or Infinity, 0
@@ -851,9 +852,398 @@ extension Decimal64 {
         new_coeff.w[0] = coefficient_x
         new_coeff.w[1] = 0
         return Decimal128.bid_get_BID128_very_fast(sign_x,
-                    exponent_x + Decimal128.DECIMAL_EXPONENT_BIAS_128 - DECIMAL_EXPONENT_BIAS, new_coeff)
+                                                   exponent_x + Decimal128.DECIMAL_EXPONENT_BIAS_128 - DECIMAL_EXPONENT_BIAS, new_coeff)
     }    // convert_bid64_to_bid128
+    
+    
+    static func bid_to_dpd64(_ ba:UInt64) -> UInt64 {
+        var res = UInt64(), exp = UInt64(), nanb = UInt64()
+        
+        //printf("arg bid "BID_FMT_LLX16" \n", ba);
+        let sign = ba & 0x8000000000000000
+        let comb = (ba & 0x7ffc000000000000) >> 50
+        var trailing = ba & 0x0003ffffffffffff
+        var bcoeff = UInt64()
+        
+        // Detect infinity, and return canonical infinity
+        if (comb & 0x1f00) == 0x1e00 {
+            return sign | 0x7800000000000000
+            
+            // Detect NaN, and canonicalize trailing
+        } else if (comb & 0x1e00) == 0x1e00 {
+            if trailing > 999999999999999 {
+                trailing = 0
+            }
+            nanb = ba & 0xfe00000000000000
+            exp = 0
+            bcoeff = trailing
+        } else {    // Normal number
+            if (comb & 0x1800) == 0x1800 {    // G0..G1 = 11 -> exp is G2..G11
+                exp = (comb >> 1) & 0x3ff
+                bcoeff = ((8 + (comb & 1)) << 50) | trailing
+            } else {
+                exp = (comb >> 3) & 0x3ff
+                bcoeff = ((comb & 7) << 50) | trailing
+            }
+            
+            // Zero the coefficient if it is non-canonical (>= 10^16)
+            if bcoeff >= 10000000000000000 {
+                bcoeff = 0
+            }
+        }
+        
+        // Floor(2^61 / 10^9)
+        let D61 = UInt64(2305843009)
+        
+        // Multipy the binary coefficient by ceil(2^64 / 1000), and take the upper
+        // 64-bits in order to compute a division by 1000.
+        
+        //#if 1
+        var yhi = UInt64(D61) * UInt64(UInt32(bcoeff) >> 27) >> 34
+        var ylo = bcoeff - 1000000000 * yhi
+        if ylo >= 1000000000 {
+            ylo = ylo - 1000000000
+            yhi = yhi + 1
+        }
+        //#else
+        //        let yhi = bcoeff / 1000000000
+        //        let ylo = bcoeff % 1000000000
+        // #endif
+        
+        // yhi = ABBBCCC ylo = DDDEEEFFF
+        let b5 = Int(ylo % 1000)    // b5 = FFF
+        let b3 = Int(ylo / 1000000) // b3 = DDD
+        let b4 = Int((Int(ylo) / 1000) - (1000 * b3))    // b4 = EEE
+        let b2 = Int(yhi % 1000)    // b2 = CCC
+        let b0 = Int(yhi / 1000000) // b0 = A
+        let b1 = Int((Int(yhi) / 1000) - (1000 * b0))    // b1 = BBB
+        
+        let dcoeff = bid_b2d[b5] | bid_b2d2[b4] | bid_b2d3[b3] | bid_b2d4[b2] | bid_b2d5[b1]
+        
+        if b0 >= 8 {    // is b0 8 or 9?
+            res = sign | ((UInt64(0x1800) | ((exp >> 8) << 9) | (UInt64(b0 & 1) << 8) | (exp & 0xff)) << 50) | dcoeff
+        } else {   // else b0 is 0..7
+            res = sign | ((((exp >> 8) << 11) | UInt64(b0 << 8) | (exp & 0xff)) << 50) | dcoeff
+        }
+        res |= nanb
+        return res
+    }
+    
+    static func dpd_to_bid64 (_ da:UInt64) -> UInt64 {
+        var res = UInt64(), nanb = UInt64(), d0 = UInt64(), exp = UInt64()
+        let sign = da & 0x8000000000000000
+        let comb = (da & 0x7ffc000000000000) >> 50
+        let trailing = da & 0x0003ffffffffffff
+        
+        if (comb & 0x1f00) == 0x1e00 {    // G0..G4 = 11110 -> Inf
+            return da & 0xf800000000000000
+        } else if (comb & 0x1f00) == 0x1f00 {    // G0..G5 = 11111 -> NaN
+            nanb = da & 0xfe00000000000000
+            exp = 0
+            d0 = 0
+        } else {
+            // Normal number
+            if (comb & 0x1800) == 0x1800 {    // G0..G1 = 11 -> d0 = 8 + G4
+                d0 = ((comb >> 8) & 1) | 8
+                // d0 = (comb & 0x0100 ? 9 : 8);
+                exp = (comb & 0x600) >> 1
+                // exp = (comb & 0x0400 ? 1 : 0) * 0x200 + (comb & 0x0200 ? 1 : 0) * 0x100; // exp leading bits are G2..G3
+            } else {
+                d0 = (comb >> 8) & 0x7
+                exp = (comb & 0x1800) >> 3
+                // exp = (comb & 0x1000 ? 1 : 0) * 0x200 + (comb & 0x0800 ? 1 : 0) * 0x100; // exp loading bits are G0..G1
+            }
+        }
+        let d1 = bid_d2b5[Int(trailing >> 40) & 0x3ff];
+        let d2 = bid_d2b4[Int(trailing >> 30) & 0x3ff];
+        let d3 = bid_d2b3[Int(trailing >> 20) & 0x3ff];
+        let d4 = bid_d2b2[Int(trailing >> 10) & 0x3ff];
+        let d5 = bid_d2b[Int(trailing) & 0x3ff];
+        
+        let bcoeff = (d5 + d4 + d3) + d2 + d1 + (1000000000000000 * d0)
+        exp += comb & 0xff
+        res = very_fast_get_BID64 (sign, Int(exp), bcoeff)
+        
+        res |= nanb
+        return res
+    }
+    
+    /*****************************************************************************
+     *  BID64_to_int64_int
+     ****************************************************************************/
+    static func bid64_to_int (_ x:UInt64, _ pfpsf: inout Status) -> Int {
+        var res = 0, x_exp = UInt64(), C1 = UInt64(), P128 = UInt128(), C = UInt128()
+        
+        // check for NaN or Infinity
+        if ((x & MASK_NAN) == MASK_NAN || (x & MASK_INF) == MASK_INF) {
+            // set invalid flag
+            pfpsf.insert(.invalidOperation)
+            
+            // return Integer Indefinite
+            return Int(bitPattern: UInt(MASK_SIGN))
+        }
+        // unpack x
+        let x_sign = x & MASK_SIGN;    // 0 for positive, MASK_SIGN for negative
+        // if steering bits are 11 (condition will be 0), then exponent is G[0:w+1] =>
+        if ((x & MASK_STEERING_BITS) == MASK_STEERING_BITS) {
+            x_exp = (x & MASK_BINARY_EXPONENT2) >> 51    // biased
+            C1 = (x & MASK_BINARY_SIG2) | MASK_BINARY_OR2
+            if C1 > 9999999999999999 {    // non-canonical
+                x_exp = 0;
+                C1 = 0;
+            }
+        } else {
+            x_exp = (x & MASK_BINARY_EXPONENT1) >> 53;    // biased
+            C1 = x & MASK_BINARY_SIG1;
+        }
+        
+        // check for zeros (possibly from non-canonical values)
+        if C1 == 0 {
+            // x is 0
+            return 0x00000000
+        }
+        // x is not special and is not zero
+        
+        // q = nr. of decimal digits in x (1 <= q <= 54)
+        //  determine first the nr. of bits in x
+        var x_nr_bits:Int
+        if C1 >= 0x0020000000000000 {    // x >= 2^53
+            // split the 64-bit value in two 32-bit halves to avoid rounding errors
+            let tmp1 = Double(C1 >> 32);   // exact conversion
+            x_nr_bits = 33 + (((Int(tmp1.bitPattern >> 52)) & 0x7ff) - 0x3ff)
+        } else {    // if x < 2^53
+            let tmp1 = Double(C1)    // exact conversion
+            x_nr_bits = 1 + (((Int(tmp1.bitPattern >> 52)) & 0x7ff) - 0x3ff)
+        }
+        var q = Int(bid_nr_digits[x_nr_bits - 1].digits)
+        if q == 0 {
+            q = Int(bid_nr_digits[x_nr_bits - 1].digits1)
+            if (C1 >= bid_nr_digits[x_nr_bits - 1].threshold_lo) {
+                q+=1
+            }
+        }
+        let exp = Int(x_exp) - 398;    // unbiased exponent
+        
+        if ((q + exp) > 19) {    // x >= 10^19 ~= 2^63.11... (cannot fit in BID_SINT64)
+            // set invalid flag
+            pfpsf.insert(.invalidOperation)
+            
+            // return Integer Indefinite
+            return Int(bitPattern: UInt(MASK_SIGN))
+        } else if ((q + exp) == 19) {    // x = c(0)c(1)...c(18).c(19)...c(q-1)
+            // in this case 2^63.11... ~= 10^19 <= x < 10^20 ~= 2^66.43...
+            // so x rounded to an integer may or may not fit in a signed 64-bit int
+            // the cases that do not fit are identified here; the ones that fit
+            // fall through and will be handled with other cases further,
+            // under '1 <= q + exp <= 19'
+            if x_sign != 0 {    // if n < 0 and q + exp = 19
+                // if n <= -2^63 - 1 then n is too large
+                // too large if c(0)c(1)...c(18).c(19)...c(q-1) >= 2^63+1
+                // <=> 0.c(0)c(1)...c(q-1) * 10^20 >= 5*(2^64+2), 1<=q<=16
+                // <=> 0.c(0)c(1)...c(q-1) * 10^20 >= 0x5000000000000000a, 1<=q<=16
+                // <=> C * 10^(20-q) >= 0x5000000000000000a, 1<=q<=16
+                // 1 <= q <= 16 => 4 <= 20-q <= 19 => 10^(20-q) is 64-bit, and so is C1
+                __mul_64x64_to_128MACH (&C, C1, bid_ten2k64[20 - q]);
+                // Note: C1 * 10^(11-q) has 19 or 20 digits; 0x5000000000000000a, has 20
+                if (C.w[1] > 0x05 || (C.w[1] == 0x05 && C.w[0] >= 0x0a)) {
+                    // set invalid flag
+                    pfpsf.insert(.invalidOperation)
+                    
+                    // return Integer Indefinite
+                    return Int(bitPattern: UInt(MASK_SIGN))
+                }
+                // else cases that can be rounded to a 64-bit int fall through
+                // to '1 <= q + exp <= 19'
+            } else {    // if n > 0 and q + exp = 19
+                // if n >= 2^63 then n is too large
+                // too large if c(0)c(1)...c(18).c(19)...c(q-1) >= 2^63
+                // <=> if 0.c(0)c(1)...c(q-1) * 10^20 >= 5*2^64, 1<=q<=16
+                // <=> if 0.c(0)c(1)...c(q-1) * 10^20 >= 0x50000000000000000, 1<=q<=16
+                // <=> if C * 10^(20-q) >= 0x50000000000000000, 1<=q<=16
+                C.w[1] = 0x0000000000000005;
+                C.w[0] = 0x0000000000000000;
+                // 1 <= q <= 16 => 4 <= 20-q <= 19 => 10^(20-q) is 64-bit, and so is C1
+                __mul_64x64_to_128MACH(&C, C1, bid_ten2k64[20 - q]);
+                if (C.w[1] >= 0x05) {
+                    // actually C.w[1] == 0x05 && C.w[0] >= 0x0000000000000000) {
+                    // set invalid flag
+                    pfpsf.insert(.invalidOperation)
+                    // return Integer Indefinite
+                    return Int(bitPattern: UInt(MASK_SIGN))
+                }
+                // else cases that can be rounded to a 64-bit int fall through
+                // to '1 <= q + exp <= 19'
+            }    // end else if n > 0 and q + exp = 19
+        }    // end else if ((q + exp) == 19)
+        
+        // n is not too large to be converted to int64: -2^63-1 < n < 2^63
+        // Note: some of the cases tested for above fall through to this point
+        if (q + exp) <= 0 {    // n = +/-0.0...c(0)c(1)...c(q-1)
+            // return 0
+            return 0
+        } else {    // if (1 <= q + exp <= 19, 1 <= q <= 16, -15 <= exp <= 18)
+            // -2^63-1 < x <= -1 or 1 <= x < 2^63 so x can be rounded
+            // to nearest to a 64-bit signed integer
+            if exp < 0 {    // 2 <= q <= 16, -15 <= exp <= -1, 1 <= q + exp <= 19
+                let ind = -exp;    // 1 <= ind <= 15; ind is a synonym for 'x'
+                // chop off ind digits from the lower part of C1
+                // C1 fits in 64 bits
+                // calculate C* and f*
+                // C* is actually floor(C*) in this case
+                // C* and f* need shifting and masking, as shown by
+                // bid_shiftright128[] and bid_maskhigh128[]
+                // 1 <= x <= 15
+                // kx = 10^(-x) = bid_ten2mk64[ind - 1]
+                // C* = C1 * 10^(-x)
+                // the approximation of 10^(-x) was rounded up to 54 bits
+                __mul_64x64_to_128MACH(&P128, C1, bid_ten2mk64[ind - 1]);
+                var Cstar = Int(P128.w[1])
+                // the top Ex bits of 10^(-x) are T* = bid_ten2mk128trunc[ind].w[0], e.g.
+                // if x=1, T*=bid_ten2mk128trunc[0].w[0]=0x1999999999999999
+                // C* = floor(C*) (logical right shift; C has p decimal digits,
+                //     correct by Property 1)
+                // n = C* * 10^(e+x)
+                
+                // shift right C* by Ex-64 = bid_shiftright128[ind]
+                let shift = bid_shiftright128[ind - 1];    // 0 <= shift <= 39
+                Cstar = Cstar >> shift;
+                
+                if x_sign != 0 {
+                    res = -Cstar
+                } else {
+                    res = Cstar
+                }
+            } else if exp == 0 {
+                // 1 <= q <= 16
+                // res = +/-C (exact)
+                if x_sign != 0 {
+                    res = -Int(C1)
+                } else {
+                    res = Int(C1)
+                }
+            } else {    // if (exp > 0) => 1 <= exp <= 18, 1 <= q <= 16, 2 <= q + exp <= 20
+                // (the upper limit of 20 on q + exp is due to the fact that
+                // +/-C * 10^exp is guaranteed to fit in 64 bits)
+                // res = +/-C * 10^exp (exact)
+                if x_sign != 0 {
+                    res = -Int(C1 * bid_ten2k64[exp])
+                } else {
+                    res = Int(C1 * bid_ten2k64[exp])
+                }
+            }
+        }
+        return res
+    }
 
+    // **********************************************************************
+    
+    static func bid64_to_double (_ x:UInt64, _ rnd_mode:Rounding, _ pfpsf: inout Status) -> Double {
+        var s = 0, e = 0, k = 0, c = UInt128(), r = UInt256(), z = UInt384()
+        if let res = unpack_bid64(x, &s, &e, &k, &c.w[1], &pfpsf) { return res }
+        
+        // Correct to 2^112 <= c < 2^113 with corresponding exponent adding 113-54=59
+        // In fact shift a further 6 places ready for reciprocal multiplication
+        // Thus (113-54)+6=65, a shift of 1 given that we've already upacked in c.w[1]
+        c.w[1] = c.w[1] << 1
+        c.w[0] = 0
+        k = k + 59
+        
+        // Check for "trivial" overflow, when 10^e * 1 > 2^{sci_emax+1}, just to
+        // keep tables smaller (it would be intercepted later otherwise).
+        //
+        // (Note that we may have normalized the coefficient, but we have a
+        //  corresponding exponent postcorrection to account for; this can
+        //  afford to be conservative anyway.)
+        //
+        // We actually check if e >= ceil((sci_emax + 1) * log_10(2))
+        // which in this case is 2 >= ceil(1024 * log_10(2)) = ceil(308.25) = 309
+        if e >= 309 {
+            pfpsf.insert(.inexact)
+            return return_double_ovf(s, rnd_mode)
+        }
+        
+        // Also check for "trivial" underflow, when 10^e * 2^113 <= 2^emin * 1/4,
+        // so test e <= floor((emin - 115) * log_10(2))
+        // In this case just fix ourselves at that value for uniformity.
+        //
+        // This is important not only to keep the tables small but to maintain the
+        // testing of the round/sticky words as a correct rounding method
+        if e <= -358 {
+            e = -358
+        }
+        
+        // Look up the breakpoint and approximate exponent
+        let m_min = bid_breakpoints_binary64[e+358]
+        var e_out = bid_exponents_binary64[e+358] - k
+        
+        // Choose provisional exponent and reciprocal multiplier based on breakpoint
+        if le128(c.w[1], c.w[0], m_min.w[1], m_min.w[0]) {
+            r = bid_multipliers1_binary64[e+358]
+        } else {
+            r = bid_multipliers2_binary64[e+358]
+            e_out = e_out + 1
+        }
+        
+        // Do the reciprocal multiplication
+        __mul_64x256_to_320(&z, c.w[1], r)
+        z.w[5]=z.w[4]; z.w[4]=z.w[3]; z.w[3]=z.w[2]; z.w[2]=z.w[1]; z.w[1]=z.w[0]; z.w[0]=0
+        
+        // Check for exponent underflow and compensate by shifting the product
+        // Cut off the process at precision+2, since we can't really shift further
+        if e_out < 1 {
+            var d = 1 - e_out
+            if d > 55 {
+                d = 55
+            }
+            e_out = 1
+            let r = srl256_short(z.w[5], z.w[4], z.w[3], z.w[2], d)
+            z.w[2...5] = r.w[0...]
+        }
+        var c_prov = z.w[5]
+        
+        // Round using round-sticky words
+        // If we spill into the next binade, correct
+        // Flag underflow where it may be needed even for |result| = SNN
+        let rndInd = roundboundIndex(rnd_mode, s != 0, Int(c_prov))
+        if lt128(bid_roundbound_128[rndInd].w[1], bid_roundbound_128[rndInd].w[0], z.w[4], z.w[3]) {
+            c_prov = c_prov + 1
+            if (c_prov == (1 << 53)) {
+                c_prov = 1 << 52;
+                e_out = e_out + 1;
+            } else if (c_prov == (1 << 52)) && (e_out == 1) {
+                let rnd_mode = roundboundIndex(rnd_mode) >> 2
+                if rnd_mode + (s & 1) == 2 {
+                    pfpsf.insert(.underflow)
+                }
+            }
+        }
+        
+        // Check for overflow
+        if e_out >= 2047 {
+            pfpsf.insert(.inexact)
+            return return_double_ovf(s, rnd_mode)
+        }
+        
+        // Modify exponent for a tiny result, otherwise lop the implicit bit
+        if c_prov < (1 << 52) {
+            e_out = 0
+        } else {
+            c_prov = c_prov & ((1 << 52) - 1)
+        }
+        
+        // Set the inexact and underflow flag as appropriate
+        if (z.w[4] != 0) || (z.w[3] != 0) {
+            pfpsf.insert(.inexact)
+            if (e_out == 0) {
+                pfpsf.insert(.underflow)
+            }
+        }
+        
+        // Package up the result as a binary floating-point number
+        return return_double(s, e_out, c_prov);
+    }
+
+    
 }
 
 

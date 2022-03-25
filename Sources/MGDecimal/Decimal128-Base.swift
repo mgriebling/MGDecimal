@@ -18,6 +18,12 @@ public struct Decimal128 : ExpressibleByStringLiteral, ExpressibleByFloatLiteral
     
     init(raw: UInt128) { x = raw } // Note: internal use only
     
+    /// Binary Integer Decimal encoded 64-bit number
+    public init(bid128: UInt128) { x = bid128 }
+    
+    /// Densely Packed Decimal encoded 64-bit number
+    public init(dpd128: UInt128) { x = Decimal128.dpd_to_bid128(dpd128) }
+    
     public init(stringLiteral value: String) {
         x = Decimal128.bid128_from_string(value, Decimal128.rounding, &Decimal128.state)
     }
@@ -41,6 +47,15 @@ public struct Decimal128 : ExpressibleByStringLiteral, ExpressibleByFloatLiteral
 ///
 extension Decimal128 {
     
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // MARK: - Numeric State variables
+    var sign: FloatingPointSign { x.w[1] & Decimal128.MASK_SIGN != 0 ? .minus : .plus }
+    var magnitude: Decimal128   { Decimal128(raw: UInt128(w: [x.w[0], x.w[1] & ~Decimal128.MASK_SIGN])) }
+    var decimal32: Decimal32    { Decimal32(raw: Decimal128.bid128_to_bid32(x, Decimal128.rounding, &Decimal128.state)) }
+    var decimal64: Decimal64    { Decimal64(raw: Decimal128.bid128_to_bid64(x, Decimal128.rounding, &Decimal128.state)) }
+    var dpd128: UInt128         { Decimal128.bid_to_dpd128(x) }
+    var int: Int                { Decimal128.bid128_to_int(x, &Decimal128.state) }
+    var double: Double          { Decimal128.bid128_to_double(x, Decimal128.rounding, &Decimal128.state) }
     
 }
 

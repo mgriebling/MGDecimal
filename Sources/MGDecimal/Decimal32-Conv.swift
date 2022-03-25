@@ -1132,11 +1132,6 @@ extension Decimal32 {
      * Takes a BID32 as input and converts it to a BID64 and returns it.
      */
     static func bid32_to_bid64(_ x:UInt32, _ pfpsf: inout Status) -> UInt64 {
-        //
-        //         BID_UINT64 res;
-        //         BID_UINT32 sign_x;
-        //         int exponent_x;
-        //         BID_UINT32 coefficient_x;
         var sign_x = UInt32(), exponent_x = 0, coefficient_x = UInt32()
         var res = UInt64()
         if !unpack_BID32 (&sign_x, &exponent_x, &coefficient_x, x) {
