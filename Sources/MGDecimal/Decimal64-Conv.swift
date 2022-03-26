@@ -242,7 +242,7 @@ extension Decimal64 {
                 pfpsf.insert(.underflow)
                 if exponent_x == -1 {
                     if (coefficient_x + bid_round_const_table[rmode1][extra_digits] >=
-                        bid_power10_table_128[extra_digits + 7].w[0]) {
+                        bid_power10_table_128[extra_digits + 7].lo) {
                         pfpsf = []
                     }
                     extra_digits -= exponent_x
@@ -256,38 +256,38 @@ extension Decimal64 {
             // now get P/10^extra_digits: shift Q_high right by M[extra_digits]-128
             let amount = bid_short_recip_scale[extra_digits]
             
-            coefficient_x = Q.w[1] >> amount
+            coefficient_x = Q.hi >> amount
             
             if (coefficient_x & 1) != 0 {
                 // check whether fractional part of initial_P/10^extra_digits
                 // is exactly .5
                 
                 // get remainder
-                let remainder_h = Q.w[1] << (64 - amount)
+                let remainder_h = Q.hi << (64 - amount)
                 
-                if remainder_h == 0 && Q.w[0] < bid_reciprocals10_64[extra_digits] {
+                if remainder_h == 0 && Q.lo < bid_reciprocals10_64[extra_digits] {
                     coefficient_x-=1
                 }
             }
             
             var status = Status.inexact //.insert(.inexact)
             // get remainder
-            let remainder_h = Q.w[1] << (64 - amount)
+            let remainder_h = Q.hi << (64 - amount)
             
             switch rmode {
                 case BID_ROUNDING_TO_NEAREST, BID_ROUNDING_TIES_AWAY:
                     // test whether fractional part is 0
-                    if (remainder_h == SIGN_MASK64 && (Q.w[0] < bid_reciprocals10_64[extra_digits])) {
+                    if (remainder_h == SIGN_MASK64 && (Q.lo < bid_reciprocals10_64[extra_digits])) {
                         status = []
                     }
                 case BID_ROUNDING_DOWN, BID_ROUNDING_TO_ZERO:
-                    if (remainder_h == 0 && (Q.w[0] < bid_reciprocals10_64[extra_digits])) {
+                    if (remainder_h == 0 && (Q.lo < bid_reciprocals10_64[extra_digits])) {
                         status = []
                     }
                 default:
                     // round up
                     var Stemp = UInt64(), carry = UInt64()
-                    __add_carry_out (&Stemp, &carry, Q.w[0], bid_reciprocals10_64[extra_digits]);
+                    __add_carry_out (&Stemp, &carry, Q.lo, bid_reciprocals10_64[extra_digits]);
                     if (remainder_h >> (64 - amount)) + carry >= (UInt64(1) << amount) {
                         status = []
                     }
@@ -355,9 +355,9 @@ extension Decimal64 {
                         remainder_h >>= amount2
                         remainder_h = remainder_h & QH;
                         
-                        if ((remainder_h == 0) && (Q_low.w[1] < bid_reciprocals10_128[extra_digits].w[1]
-                                || (Q_low.w[1] == bid_reciprocals10_128[extra_digits].w[1]
-                                    && Q_low.w[0] < bid_reciprocals10_128[extra_digits].w[0]))) {
+                        if ((remainder_h == 0) && (Q_low.hi < bid_reciprocals10_128[extra_digits].hi
+                                || (Q_low.hi == bid_reciprocals10_128[extra_digits].hi
+                                    && Q_low.lo < bid_reciprocals10_128[extra_digits].lo))) {
                             _C64-=1
                         }
                     }
@@ -373,25 +373,25 @@ extension Decimal64 {
                         case BID_ROUNDING_TO_NEAREST, BID_ROUNDING_TIES_AWAY:
                             // test whether fractional part is 0
                             if (remainder_h == 0x8000000000000000
-                                && (Q_low.w[1] < bid_reciprocals10_128[extra_digits].w[1]
-                                    || (Q_low.w[1] == bid_reciprocals10_128[extra_digits].w[1]
-                                        && Q_low.w[0] <
-                                        bid_reciprocals10_128[extra_digits].w[0]))) {
+                                && (Q_low.hi < bid_reciprocals10_128[extra_digits].hi
+                                    || (Q_low.hi == bid_reciprocals10_128[extra_digits].hi
+                                        && Q_low.lo <
+                                        bid_reciprocals10_128[extra_digits].lo))) {
                                 status = []
                             }
                         case BID_ROUNDING_DOWN, BID_ROUNDING_TO_ZERO:
                             if ((remainder_h == 0)
-                                && (Q_low.w[1] < bid_reciprocals10_128[extra_digits].w[1]
-                                    || (Q_low.w[1] == bid_reciprocals10_128[extra_digits].w[1]
-                                        && Q_low.w[0] <
-                                        bid_reciprocals10_128[extra_digits].w[0]))) {
+                                && (Q_low.hi < bid_reciprocals10_128[extra_digits].hi
+                                    || (Q_low.hi == bid_reciprocals10_128[extra_digits].hi
+                                        && Q_low.lo <
+                                        bid_reciprocals10_128[extra_digits].lo))) {
                                 status = []
                             }
                         default:
                             // round up
                             var Stemp = UInt128(), CY = UInt64(), carry = UInt64()
-                            __add_carry_out (&Stemp.w[0], &CY, Q_low.w[0], bid_reciprocals10_128[extra_digits].w[0])
-                            __add_carry_in_out (&Stemp.w[1], &carry, Q_low.w[1], bid_reciprocals10_128[extra_digits].w[1], CY)
+                            __add_carry_out (&Stemp.lo, &CY, Q_low.lo, bid_reciprocals10_128[extra_digits].lo)
+                            __add_carry_in_out (&Stemp.hi, &carry, Q_low.hi, bid_reciprocals10_128[extra_digits].hi, CY)
                             if ((remainder_h >> (64 - amount)) + carry >= (UInt64(1) << amount)) {
                                 status = []
                             }
@@ -494,11 +494,11 @@ extension Decimal64 {
         // get digits to be shifted out
         let extra_digits = 1 - expon
         var C128 = UInt128()
-        C128.w[0] = coeff + bid_round_const_table[rmode1][extra_digits]
+        C128.lo = coeff + bid_round_const_table[rmode1][extra_digits]
         
         // get coeff*(2^M[extra_digits])/10^extra_digits
         var QH = UInt64(), Q_low = UInt128()
-        __mul_64x128_full(&QH, &Q_low, C128.w[0], bid_reciprocals10_128[extra_digits])
+        __mul_64x128_full(&QH, &Q_low, C128.lo, bid_reciprocals10_128[extra_digits])
         
         // now get P/10^extra_digits: shift Q_high right by M[extra_digits]-128
         let amount = bid_recip_scale[extra_digits]
@@ -518,9 +518,9 @@ extension Decimal64 {
                 remainder_h = remainder_h & Int(QH)
                 
                 if ((remainder_h == 0)
-                    && (Q_low.w[1] < bid_reciprocals10_128[extra_digits].w[1]
-                        || (Q_low.w[1] == bid_reciprocals10_128[extra_digits].w[1]
-                            && Q_low.w[0] < bid_reciprocals10_128[extra_digits].w[0]))) {
+                    && (Q_low.hi < bid_reciprocals10_128[extra_digits].hi
+                        || (Q_low.hi == bid_reciprocals10_128[extra_digits].hi
+                            && Q_low.lo < bid_reciprocals10_128[extra_digits].lo))) {
                     _C64-=1
                 }
             }
@@ -537,23 +537,23 @@ extension Decimal64 {
                 case BID_ROUNDING_TO_NEAREST, BID_ROUNDING_TIES_AWAY:
                     // test whether fractional part is 0
                     if (remainder_h == 0x8000000000000000
-                        && (Q_low.w[1] < bid_reciprocals10_128[extra_digits].w[1]
-                            || (Q_low.w[1] == bid_reciprocals10_128[extra_digits].w[1]
-                                && Q_low.w[0] < bid_reciprocals10_128[extra_digits].w[0]))) {
+                        && (Q_low.hi < bid_reciprocals10_128[extra_digits].hi
+                            || (Q_low.hi == bid_reciprocals10_128[extra_digits].hi
+                                && Q_low.lo < bid_reciprocals10_128[extra_digits].lo))) {
                         status = []
                     }
                 case BID_ROUNDING_DOWN, BID_ROUNDING_TO_ZERO:
                     if ((remainder_h == 0)
-                        && (Q_low.w[1] < bid_reciprocals10_128[extra_digits].w[1]
-                            || (Q_low.w[1] == bid_reciprocals10_128[extra_digits].w[1]
-                                && Q_low.w[0] < bid_reciprocals10_128[extra_digits].w[0]))) {
+                        && (Q_low.hi < bid_reciprocals10_128[extra_digits].hi
+                            || (Q_low.hi == bid_reciprocals10_128[extra_digits].hi
+                                && Q_low.lo < bid_reciprocals10_128[extra_digits].lo))) {
                         status = []
                     }
                 default:
                     // round up
                     var Stemp = UInt128(), CY = UInt64(), carry = UInt64()
-                    __add_carry_out(&Stemp.w[0], &CY, Q_low.w[0], bid_reciprocals10_128[extra_digits].w[0]);
-                    __add_carry_in_out(&Stemp.w[1], &carry, Q_low.w[1], bid_reciprocals10_128[extra_digits].w[1], CY);
+                    __add_carry_out(&Stemp.lo, &CY, Q_low.lo, bid_reciprocals10_128[extra_digits].lo);
+                    __add_carry_in_out(&Stemp.hi, &carry, Q_low.hi, bid_reciprocals10_128[extra_digits].hi, CY);
                     if ((remainder_h >> (64 - amount)) + carry >= (UInt64(1) << amount)) {
                         status = []
                     }
@@ -642,7 +642,7 @@ extension Decimal64 {
     static func double_to_bid64 (_ x: Double, _ rmode:Rounding, _ fpsc: inout Status) -> UInt64 {
         // Unpack the input
         var s = 0, e = 0, c = UInt128(), t = 0
-        if let res = unpack_binary64 (x, &s, &e, &c.w[1], &t, &fpsc) { return res }
+        if let res = unpack_binary64 (x, &s, &e, &c.hi, &t, &fpsc) { return res }
         // Now -1126<=e<=971 (971 for max normal, -1074 for min normal, -1126 for min denormal)
         
         // Treat like a quad input for uniformity, so (2^{113-53} * c * r) >> 312
@@ -652,8 +652,8 @@ extension Decimal64 {
         //
         // Remember to compensate for the fact that exponents are integer for quad
         
-        c.w[1] = c.w[1] << 4;
-        c.w[0] = 0;
+        c.hi = c.hi << 4;
+        c.lo = 0;
         t += (113 - 53);
         e -= (113 - 53); // Now e belongs [-1186;911].
         
@@ -687,22 +687,22 @@ extension Decimal64 {
         if (e <= 0) {
             var cint = UInt128()
             let a = -(e + t)
-            cint.w[1] = c.w[1]; cint.w[0] = c.w[0]
+            cint.hi = c.hi; cint.lo = c.lo
             if (a <= 0) {
-                cint = srl128 (cint.w[1], cint.w[0], 8 - e);
-                if ((cint.w[1] == 0) && (cint.w[0] < 10000000000000000)) {
-                    return return_bid64 (s, 398, Int(cint.w[0]))
+                cint = srl128 (cint.hi, cint.lo, 8 - e);
+                if ((cint.hi == 0) && (cint.lo < 10000000000000000)) {
+                    return return_bid64 (s, 398, Int(cint.lo))
                 }
             } else if (a <= 48) {
                 var pow5 = bid_coefflimits_bid64[a]
-                cint = srl128(cint.w[1], cint.w[0], 8 + t)
-                if le128(cint.w[1], cint.w[0], pow5.w[1], pow5.w[0]) {
+                cint = srl128(cint.hi, cint.lo, 8 + t)
+                if le128(cint.hi, cint.lo, pow5.hi, pow5.lo) {
                     var cc = UInt128()
-                    cc.w[1] = cint.w[1];
-                    cc.w[0] = cint.w[0];
+                    cc.hi = cint.hi;
+                    cc.lo = cint.lo;
                     pow5 = bid_power_five[a];
                     __mul_128x128_low(&cc, cc, pow5);
-                    return return_bid64 (s, 398 - a, Int(cc.w[0]))
+                    return return_bid64 (s, 398 - a, Int(cc.lo))
                 }
             }
         }
@@ -719,7 +719,7 @@ extension Decimal64 {
         
         // Choose exponent and reciprocal multiplier based on breakpoint
         var r = UInt256()
-        if le128(c.w[1], c.w[0], m_min.w[1], m_min.w[0]) {
+        if le128(c.hi, c.lo, m_min.hi, m_min.lo) {
             r = bid_multipliers1_bid64[e+1437]
         } else {
             r = bid_multipliers2_bid64[e+1437]
@@ -734,7 +734,7 @@ extension Decimal64 {
         // Round using round-sticky words
         // If we spill over into the next decade, correct
         let rindex = roundboundIndex(rmode, s != 0, c_prov)
-        if lt128(bid_roundbound_128[rindex].w[1], bid_roundbound_128[rindex].w[0], z.w[4], z.w[3]) {
+        if lt128(bid_roundbound_128[rindex].hi, bid_roundbound_128[rindex].lo, z.w[4], z.w[3]) {
             c_prov = c_prov + 1
             if c_prov == 10000000000000000 {
                 c_prov = 1000000000000000
@@ -842,15 +842,15 @@ extension Decimal64 {
                 if (x & SNAN_MASK64) == SNAN_MASK64 {   // sNaN
                     pfpsf.insert(.invalidOperation)
                 }
-                res.w[0] = coefficient_x & 0x0003ffffffffffff
-                __mul_64x64_to_128(&res, res.w[0], bid_power10_table_128[18].w[0]);
-                res.w[1] |= coefficient_x & 0xfc00000000000000
+                res.lo = coefficient_x & 0x0003ffffffffffff
+                __mul_64x64_to_128(&res, res.lo, bid_power10_table_128[18].lo);
+                res.hi |= coefficient_x & 0xfc00000000000000
                 return res
             }
         }
         
-        new_coeff.w[0] = coefficient_x
-        new_coeff.w[1] = 0
+        new_coeff.lo = coefficient_x
+        new_coeff.hi = 0
         return Decimal128.bid_get_BID128_very_fast(sign_x,
                                                    exponent_x + Decimal128.DECIMAL_EXPONENT_BIAS_128 - DECIMAL_EXPONENT_BIAS, new_coeff)
     }    // convert_bid64_to_bid128
@@ -1045,7 +1045,7 @@ extension Decimal64 {
                 // 1 <= q <= 16 => 4 <= 20-q <= 19 => 10^(20-q) is 64-bit, and so is C1
                 __mul_64x64_to_128MACH (&C, C1, bid_ten2k64[20 - q]);
                 // Note: C1 * 10^(11-q) has 19 or 20 digits; 0x5000000000000000a, has 20
-                if (C.w[1] > 0x05 || (C.w[1] == 0x05 && C.w[0] >= 0x0a)) {
+                if (C.hi > 0x05 || (C.hi == 0x05 && C.lo >= 0x0a)) {
                     // set invalid flag
                     pfpsf.insert(.invalidOperation)
                     
@@ -1060,12 +1060,12 @@ extension Decimal64 {
                 // <=> if 0.c(0)c(1)...c(q-1) * 10^20 >= 5*2^64, 1<=q<=16
                 // <=> if 0.c(0)c(1)...c(q-1) * 10^20 >= 0x50000000000000000, 1<=q<=16
                 // <=> if C * 10^(20-q) >= 0x50000000000000000, 1<=q<=16
-                C.w[1] = 0x0000000000000005;
-                C.w[0] = 0x0000000000000000;
+                C.hi = 0x0000000000000005;
+                C.lo = 0x0000000000000000;
                 // 1 <= q <= 16 => 4 <= 20-q <= 19 => 10^(20-q) is 64-bit, and so is C1
                 __mul_64x64_to_128MACH(&C, C1, bid_ten2k64[20 - q]);
-                if (C.w[1] >= 0x05) {
-                    // actually C.w[1] == 0x05 && C.w[0] >= 0x0000000000000000) {
+                if (C.hi >= 0x05) {
+                    // actually C.hi == 0x05 && C.lo >= 0x0000000000000000) {
                     // set invalid flag
                     pfpsf.insert(.invalidOperation)
                     // return Integer Indefinite
@@ -1097,9 +1097,9 @@ extension Decimal64 {
                 // C* = C1 * 10^(-x)
                 // the approximation of 10^(-x) was rounded up to 54 bits
                 __mul_64x64_to_128MACH(&P128, C1, bid_ten2mk64[ind - 1]);
-                var Cstar = Int(P128.w[1])
-                // the top Ex bits of 10^(-x) are T* = bid_ten2mk128trunc[ind].w[0], e.g.
-                // if x=1, T*=bid_ten2mk128trunc[0].w[0]=0x1999999999999999
+                var Cstar = Int(P128.hi)
+                // the top Ex bits of 10^(-x) are T* = bid_ten2mk128trunc[ind].lo, e.g.
+                // if x=1, T*=bid_ten2mk128trunc[0].lo=0x1999999999999999
                 // C* = floor(C*) (logical right shift; C has p decimal digits,
                 //     correct by Property 1)
                 // n = C* * 10^(e+x)
@@ -1139,13 +1139,13 @@ extension Decimal64 {
     
     static func bid64_to_double (_ x:UInt64, _ rnd_mode:Rounding, _ pfpsf: inout Status) -> Double {
         var s = 0, e = 0, k = 0, c = UInt128(), r = UInt256(), z = UInt384()
-        if let res = unpack_bid64(x, &s, &e, &k, &c.w[1], &pfpsf) { return res }
+        if let res = unpack_bid64(x, &s, &e, &k, &c.hi, &pfpsf) { return res }
         
         // Correct to 2^112 <= c < 2^113 with corresponding exponent adding 113-54=59
         // In fact shift a further 6 places ready for reciprocal multiplication
-        // Thus (113-54)+6=65, a shift of 1 given that we've already upacked in c.w[1]
-        c.w[1] = c.w[1] << 1
-        c.w[0] = 0
+        // Thus (113-54)+6=65, a shift of 1 given that we've already upacked in c.hi
+        c.hi = c.hi << 1
+        c.lo = 0
         k = k + 59
         
         // Check for "trivial" overflow, when 10^e * 1 > 2^{sci_emax+1}, just to
@@ -1177,7 +1177,7 @@ extension Decimal64 {
         var e_out = bid_exponents_binary64[e+358] - k
         
         // Choose provisional exponent and reciprocal multiplier based on breakpoint
-        if le128(c.w[1], c.w[0], m_min.w[1], m_min.w[0]) {
+        if le128(c.hi, c.lo, m_min.hi, m_min.lo) {
             r = bid_multipliers1_binary64[e+358]
         } else {
             r = bid_multipliers2_binary64[e+358]
@@ -1185,7 +1185,7 @@ extension Decimal64 {
         }
         
         // Do the reciprocal multiplication
-        __mul_64x256_to_320(&z, c.w[1], r)
+        __mul_64x256_to_320(&z, c.hi, r)
         z.w[5]=z.w[4]; z.w[4]=z.w[3]; z.w[3]=z.w[2]; z.w[2]=z.w[1]; z.w[1]=z.w[0]; z.w[0]=0
         
         // Check for exponent underflow and compensate by shifting the product
@@ -1205,7 +1205,7 @@ extension Decimal64 {
         // If we spill into the next binade, correct
         // Flag underflow where it may be needed even for |result| = SNN
         let rndInd = roundboundIndex(rnd_mode, s != 0, Int(c_prov))
-        if lt128(bid_roundbound_128[rndInd].w[1], bid_roundbound_128[rndInd].w[0], z.w[4], z.w[3]) {
+        if lt128(bid_roundbound_128[rndInd].hi, bid_roundbound_128[rndInd].lo, z.w[4], z.w[3]) {
             c_prov = c_prov + 1
             if (c_prov == (1 << 53)) {
                 c_prov = 1 << 52;

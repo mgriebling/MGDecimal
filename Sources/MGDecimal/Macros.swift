@@ -25,9 +25,9 @@ var isBigEndian: Bool { let one=1; return one == one.bigEndian }
 func BID_SWAP128(_ x: inout UInt128) {
     if isBigEndian {
         // swap 64-bit words
-        let sw = x.w[1]
-        x.w[1] = x.w[0]
-        x.w[0] = sw
+        let sw = x.hi
+        x.hi = x.lo
+        x.lo = sw
     }
 }
 
@@ -135,7 +135,7 @@ func __L0_Normalize_10to18(_ X_hi:inout UInt64, _ X_lo:inout UInt64) {
 //  return 0 if A<=B
 //  non-zero if A>B
 func __unsigned_compare_gt_128(_ A:UInt128, _ B:UInt128) -> Bool {
-    (A.w[1]>B.w[1]) || ((A.w[1]==B.w[1]) && (A.w[0]>B.w[0]))
+    (A.hi>B.hi) || ((A.hi==B.hi) && (A.lo>B.lo))
 }
 
 // Unpack decimal floating-point number x into sign,exponent,coefficient
@@ -191,27 +191,27 @@ func unpack_bid64(_ x:UInt64, _ s: inout Int, _ e: inout Int, _ k: inout Int, _ 
 }
 
 func unpack_bid128(_ x:UInt128, _ s: inout Int, _ e: inout Int, _ k: inout Int, _ c: inout UInt128, _ status: inout Status) -> Double? {
-    s = Int(x.w[BID_HIGH_128W] >> 63)
-    if ((x.w[BID_HIGH_128W] & (3<<61)) == (3<<61)) {
-        if ((x.w[BID_HIGH_128W] & (0xF<<59)) == (0xF<<59)) {
-            if ((x.w[BID_HIGH_128W] & (0x1F<<58)) != (0x1F<<58)) { return return_double_inf(s) }
-            if ((x.w[BID_HIGH_128W] & (1<<57)) != 0) {
+    s = Int(x.hi >> 63)
+    if ((x.hi & (3<<61)) == (3<<61)) {
+        if ((x.hi & (0xF<<59)) == (0xF<<59)) {
+            if ((x.hi & (0x1F<<58)) != (0x1F<<58)) { return return_double_inf(s) }
+            if ((x.hi & (1<<57)) != 0) {
                 status.insert(.invalidOperation)
             }
-            if lt128(54210108624275,4089650035136921599, x.w[BID_HIGH_128W] & 0x3FFFFFFFFFFF, x.w[BID_LOW_128W]) {
+            if lt128(54210108624275,4089650035136921599, x.hi & 0x3FFFFFFFFFFF, x.lo) {
                 return return_double_nan(s,0,0)
             }
-            return return_double_nan(s, x.w[BID_HIGH_128W] << 18 + x.w[BID_LOW_128W] >> 46, x.w[BID_LOW_128W] << 18)
+            return return_double_nan(s, x.hi << 18 + x.lo >> 46, x.lo << 18)
         }
         return return_double_zero(s)
     } else {
-        e = Int((x.w[BID_HIGH_128W] >> 49) & ((1<<14)-1)) - 6176;
-        c.w[1] = x.w[BID_HIGH_128W] & ((1<<49)-1);
-        c.w[0] = x.w[BID_LOW_128W];
-        if lt128(542101086242752,4003012203950112767,c.w[1],c.w[0]) { c.w[1] = 0; c.w[0] = 0 }
-        if (c.w[1] == 0) && (c.w[0] == 0) { return return_double_zero(s) }
-        k = clz128_nz(c.w[1],c.w[0]) - 15
-        c = sll128(c.w[1], c.w[0], k)
+        e = Int((x.hi >> 49) & ((1<<14)-1)) - 6176;
+        c.hi = x.hi & ((1<<49)-1);
+        c.lo = x.lo;
+        if lt128(542101086242752,4003012203950112767,c.hi,c.lo) { c.hi = 0; c.lo = 0 }
+        if (c.hi == 0) && (c.lo == 0) { return return_double_zero(s) }
+        k = clz128_nz(c.hi,c.lo) - 15
+        c = sll128(c.hi, c.lo, k)
         return nil
     }
 }
@@ -286,8 +286,8 @@ func return_bid32_ovf(_ s:Int) -> UInt32 {
 
 func return_bid128(_ s:Int, _ e:Int, _ c_hi:UInt64, _ c_lo:UInt64) -> UInt128 {
     var x_out = UInt128()
-    x_out.w[BID_LOW_128W] = c_lo
-    x_out.w[BID_HIGH_128W] = (UInt64(s) << 63) + (UInt64(e) << 49) + c_hi
+    x_out.lo = c_lo
+    x_out.hi = (UInt64(s) << 63) + (UInt64(e) << 49) + c_hi
     return x_out
 }
 
@@ -300,10 +300,10 @@ func return_bid128(_ s:Int, _ e:Int, _ c_hi:UInt64, _ c_lo:UInt64) -> UInt128 {
 }
 
 @inlinable func return_bid32(_ s:Int, _ e:Int, _ c:Int) -> UInt32 {
-    if UInt32(c) < (1<<23) {
+    if UInt32(c) < UInt32(1)<<23 {
         return (UInt32(s) << 31) + (UInt32(e) << 23) + UInt32(c)
     } else {
-        return (UInt32(s) << 31) + UInt32((0x3<<29) - (1<<23)) + (UInt32(e) << 21) + UInt32(c)
+        return (UInt32(s) << 31) + UInt32((0x3<<29) - (UInt32(1)<<23)) + (UInt32(e) << 21) + UInt32(c)
     }
 }
 
@@ -323,23 +323,23 @@ func sll128(_ hi:UInt64, _ lo:UInt64, _ c:Int) -> UInt128 {
 
 func __shl_128_long(_ Q:inout UInt128, _ A:UInt128, _ k:Int) {
     if k<64 {
-        Q.w[1]  = A.w[1] << k;
-        Q.w[1] |= A.w[0] >> (64-k);
-        Q.w[0]  = A.w[0] << k;
+        Q.hi  = A.hi << k;
+        Q.hi |= A.lo >> (64-k);
+        Q.lo  = A.lo << k;
     } else {
-        Q.w[1] = A.w[0]<<((k)-64);
-        Q.w[0] = 0;
+        Q.hi = A.lo<<((k)-64);
+        Q.lo = 0;
     }
 }
 
 func __shr_128_long(_ Q:inout UInt128, _ A:UInt128, _ k:Int) {
     if k<64 {
-        Q.w[0]  = A.w[0] >> k;
-        Q.w[0] |= A.w[1] << (64-k);
-        Q.w[1]  = A.w[1] >> k;
+        Q.lo  = A.lo >> k;
+        Q.lo |= A.hi << (64-k);
+        Q.hi  = A.hi >> k;
     } else {
-        Q.w[0] = A.w[1]>>(k-64);
-        Q.w[1] = 0;
+        Q.lo = A.hi>>(k-64);
+        Q.hi = 0;
     }
 }
 
@@ -361,9 +361,9 @@ func srl128_short(_ hi:UInt64, _ lo:UInt64, _ c:Int) -> UInt128 {
 }
 
 func __shr_128(_ Q: inout UInt128, _ A: inout UInt128, _ k:Int) {
-     Q.w[0]  = A.w[0] >> k;
-     Q.w[0] |= A.w[1] << (64-k);
-     Q.w[1]  = A.w[1] >> k;
+     Q.lo  = A.lo >> k;
+     Q.lo |= A.hi << (64-k);
+     Q.hi  = A.hi >> k;
 }
 
 func srl128(_ hi:UInt64, _ lo:UInt64, _ c:Int) -> UInt128 {
@@ -393,7 +393,7 @@ func srl384_short(_ x5: UInt64, _ x4: UInt64, _ x3:UInt64, _ x2:UInt64, _ x1:UIn
 }
 
 func __unsigned_compare_ge_128(_ A:UInt128, _ B:UInt128) -> Bool {
-    (A.w[1]>B.w[1]) || ((A.w[1]==B.w[1]) && (A.w[0]>=B.w[0]))
+    (A.hi>B.hi) || ((A.hi==B.hi) && (A.lo>=B.lo))
 }
 
 // Counting trailing zeros in an unsigned 64-bit word
@@ -416,11 +416,11 @@ func __mul_64x256_to_320(_ P:inout UInt384, _ A:UInt64, _ B:UInt256) {
     __mul_64x64_to_128(&lP1, A, B.w[1]);
     __mul_64x64_to_128(&lP2, A, B.w[2]);
     __mul_64x64_to_128(&lP3, A, B.w[3]);
-    P.w[0] = lP0.w[0];
-    __add_carry_out(&P.w[1],&lC,lP1.w[0],lP0.w[1]);
-    __add_carry_in_out(&P.w[2],&lC,lP2.w[0],lP1.w[1],lC);
-    __add_carry_in_out(&P.w[3],&lC,lP3.w[0],lP2.w[1],lC);
-    P.w[4] = lP3.w[1] + lC;
+    P.w[0] = lP0.lo;
+    __add_carry_out(&P.w[1],&lC,lP1.lo,lP0.hi);
+    __add_carry_in_out(&P.w[2],&lC,lP2.lo,lP1.hi,lC);
+    __add_carry_in_out(&P.w[3],&lC,lP3.lo,lP2.hi,lC);
+    P.w[4] = lP3.hi + lC;
 }
 
 // 128x256->384 bit multiplication (missing from existing macros)
@@ -428,8 +428,8 @@ func __mul_64x256_to_320(_ P:inout UInt384, _ A:UInt64, _ B:UInt256) {
 func __mul_128x256_to_384(_  P: inout UInt384, _ A:UInt128, _ B:UInt256) {
     var P0=UInt384(),P1=UInt384()
     var CY:UInt64=0
-    __mul_64x256_to_320(&P0, A.w[0], B);
-    __mul_64x256_to_320(&P1, A.w[1], B);
+    __mul_64x256_to_320(&P0, A.lo, B);
+    __mul_64x256_to_320(&P1, A.hi, B);
     P.w[0] = P0.w[0];
     __add_carry_out(&P.w[1],&CY,P1.w[0],P0.w[1]);
     __add_carry_in_out(&P.w[2],&CY,P1.w[1],P0.w[2],CY);
@@ -440,11 +440,11 @@ func __mul_128x256_to_384(_  P: inout UInt384, _ A:UInt128, _ B:UInt256) {
 
 func __mul_64x128_low(_ Ql:inout UInt128, _ A:UInt64, _ B:UInt128) {
     var ALBL = UInt128(), ALBH = UInt128(), QM2 = UInt128()
-    __mul_64x64_to_128(&ALBH, A, B.w[1])
-    __mul_64x64_to_128(&ALBL, A, B.w[0])
-    Ql.w[0] = ALBL.w[0]
-    __add_128_64(&QM2, ALBH, ALBL.w[1])
-    Ql.w[1] = QM2.w[0]
+    __mul_64x64_to_128(&ALBH, A, B.hi)
+    __mul_64x64_to_128(&ALBL, A, B.lo)
+    Ql.lo = ALBL.lo
+    __add_128_64(&QM2, ALBH, ALBL.hi)
+    Ql.hi = QM2.lo
 }
 
 /*****************************************************
@@ -454,7 +454,7 @@ func __mul_64x128_low(_ Ql:inout UInt128, _ A:UInt64, _ B:UInt128) {
 //
 func __mul_64x64_to_128(_ P: inout UInt128, _ CX:UInt64, _ CY:UInt64) {
     let res = CX.multipliedFullWidth(by: CY)
-    P.w[1] = res.high; P.w[0] = res.low
+    P.hi = res.high; P.lo = res.low
 //BID_UINT64 CXH, CXL, CYH,CYL,PL,PH,PM,PM2;
 //    CXH = (CX) >> 32;
 //    CXL = (BID_UINT32)(CX);
@@ -468,8 +468,8 @@ func __mul_64x64_to_128(_ P: inout UInt128, _ CX:UInt64, _ CY:UInt64) {
 //    PH += (PM>>32);
 //    PM = (BID_UINT64)((BID_UINT32)PM)+PM2+(PL>>32);
 //
-//    (P).w[1] = PH + (PM>>32);
-//    (P).w[0] = (PM<<32)+(BID_UINT32)PL;
+//    (P).hi = PH + (PM>>32);
+//    (P).lo = (PM<<32)+(BID_UINT32)PL;
 }
 
 // get full 64x64bit product
@@ -478,7 +478,7 @@ func __mul_64x64_to_128(_ P: inout UInt128, _ CX:UInt64, _ CY:UInt64) {
 //
 func __mul_64x64_to_128_fast(_ P: inout UInt128, _ CX:UInt64, _ CY:UInt64) {
     let res = CX.multipliedFullWidth(by: CY)
-    P.w[1] = res.high; P.w[0] = res.low
+    P.hi = res.high; P.lo = res.low
 //    CXH = (CX) >> 32;
 //    CXL = (BID_UINT32)(CX);
 //    CYH = (CY) >> 32;
@@ -490,58 +490,58 @@ func __mul_64x64_to_128_fast(_ P: inout UInt128, _ CX:UInt64, _ CY:UInt64) {
 //    PM += CXL*CYH;
 //    PM += (PL>>32);
 //
-//    (P).w[1] = PH + (PM>>32);
-//    (P).w[0] = (PM<<32)+(BID_UINT32)PL;
+//    (P).hi = PH + (PM>>32);
+//    (P).lo = (PM<<32)+(BID_UINT32)PL;
 }
 
 func __mul_64x128_full(_ Ph:inout UInt64, _ Ql: inout UInt128,  _ A:UInt64, _ B:UInt128) {
 // BID_UINT128 ALBL, ALBH, QM2;
     var ALBL = UInt128(), ALBH = UInt128(), QM2 = UInt128()
-    __mul_64x64_to_128(&ALBH, A, B.w[1])
-    __mul_64x64_to_128(&ALBL, A, B.w[0])
+    __mul_64x64_to_128(&ALBH, A, B.hi)
+    __mul_64x64_to_128(&ALBL, A, B.lo)
                                                   
-    Ql.w[0] = ALBL.w[0]
-    __add_128_64(&QM2, ALBH, ALBL.w[1])
-    Ql.w[1] = QM2.w[0]
-    Ph = QM2.w[1]
+    Ql.lo = ALBL.lo
+    __add_128_64(&QM2, ALBH, ALBL.hi)
+    Ql.hi = QM2.lo
+    Ph = QM2.hi
 }
 
 func __mul_128x128_full(_ Qh:inout UInt128, _ Ql:inout UInt128, _ A:UInt128, _ B:UInt128) {
     var ALBL = UInt128(), ALBH = UInt128(), AHBL = UInt128(), AHBH = UInt128()
                                                   
-    __mul_64x64_to_128(&ALBH, A.w[0], B.w[1]);
-    __mul_64x64_to_128(&AHBL, B.w[0], A.w[1]);
-    __mul_64x64_to_128(&ALBL, A.w[0], B.w[0]);
-    __mul_64x64_to_128(&AHBH, A.w[1], B.w[1]);
+    __mul_64x64_to_128(&ALBH, A.lo, B.hi);
+    __mul_64x64_to_128(&AHBL, B.lo, A.hi);
+    __mul_64x64_to_128(&ALBL, A.lo, B.lo);
+    __mul_64x64_to_128(&AHBH, A.hi, B.hi);
             
     var QM = UInt128(), QM2 = UInt128()
     __add_128_128(&QM, ALBH, AHBL);
-    Ql.w[0] = ALBL.w[0];
-    __add_128_64(&QM2, QM, ALBL.w[1]);
-    __add_128_64(&Qh, AHBH, QM2.w[1]);
-    Ql.w[1] = QM2.w[0];
+    Ql.lo = ALBL.lo;
+    __add_128_64(&QM2, QM, ALBL.hi);
+    __add_128_64(&Qh, AHBH, QM2.hi);
+    Ql.hi = QM2.lo;
 }
 
 func __mul_128x128_high(_ Q:inout UInt128, _ A:UInt128, _ B:UInt128) {
     var ALBL=UInt128(), ALBH=UInt128(), AHBL=UInt128(), AHBH=UInt128(), QM=UInt128(), QM2=UInt128()
     
-    __mul_64x64_to_128(&ALBH, A.w[0], B.w[1])
-    __mul_64x64_to_128(&AHBL, B.w[0], A.w[1])
-    __mul_64x64_to_128(&ALBL, A.w[0], B.w[0])
-    __mul_64x64_to_128(&AHBH, A.w[1], B.w[1])
+    __mul_64x64_to_128(&ALBH, A.lo, B.hi)
+    __mul_64x64_to_128(&AHBL, B.lo, A.hi)
+    __mul_64x64_to_128(&ALBL, A.lo, B.lo)
+    __mul_64x64_to_128(&AHBH, A.hi, B.hi)
     
     __add_128_128(&QM, ALBH, AHBL)
-    __add_128_64(&QM2, QM, ALBL.w[1])
-    __add_128_64(&Q, AHBH, QM2.w[1])
+    __add_128_64(&QM2, QM, ALBL.hi)
+    __add_128_64(&Q, AHBH, QM2.hi)
 }
 
 func __mul_128x128_low(_ Ql: inout UInt128, _ A:UInt128, _ B:UInt128) {
     var ALBL:UInt128 = UInt128(w: [0,0])
-    __mul_64x64_to_128(&ALBL, A.w[0], B.w[0]);
-    let QM64 = B.w[0]*A.w[1] + A.w[0]*(B).w[1];
+    __mul_64x64_to_128(&ALBL, A.lo, B.lo);
+    let QM64 = B.lo*A.hi + A.lo*(B).hi;
                                                   
-    Ql.w[0] = ALBL.w[0];
-    Ql.w[1] = QM64 + ALBL.w[1];
+    Ql.lo = ALBL.lo;
+    Ql.hi = QM64 + ALBL.hi;
 }
 
 func __mul_256x256_to_512(_ P: inout UInt512, _ A:UInt256, _ B:UInt256) {
@@ -596,18 +596,144 @@ func __mul_128x128_to_256(_ P256: inout UInt256, _ A:UInt128, _ B:UInt128) {
     var Qll = UInt128(), Qlh = UInt128()
     var Phl = UInt64(), Phh = UInt64(), CY1 = UInt64(), CY2 = UInt64()
     
-    __mul_64x128_full(&Phl, &Qll, A.w[0], B)
-    __mul_64x128_full(&Phh, &Qlh, A.w[1], B)
-    P256.w[0] = Qll.w[0]
-    __add_carry_out(&P256.w[1], &CY1, Qlh.w[0], Qll.w[1])
-    __add_carry_in_out(&P256.w[2], &CY2, Qlh.w[1], Phl, CY1)
+    __mul_64x128_full(&Phl, &Qll, A.lo, B)
+    __mul_64x128_full(&Phh, &Qlh, A.hi, B)
+    P256.w[0] = Qll.lo
+    __add_carry_out(&P256.w[1], &CY1, Qlh.lo, Qll.hi)
+    __add_carry_in_out(&P256.w[2], &CY2, Qlh.hi, Phl, CY1)
     P256.w[3] = Phh + CY2
 }
 
 func __mul_128x64_to_128(_ Q128: inout UInt128, _ A64:UInt64, _ B128:UInt128) {
-  let ALBH_L = A64 * B128.w[1]
-  __mul_64x64_to_128MACH(&Q128, A64, B128.w[0])
-  Q128.w[1] += ALBH_L
+  let ALBH_L = A64 * B128.hi
+  __mul_64x64_to_128MACH(&Q128, A64, B128.lo)
+  Q128.hi += ALBH_L
+}
+
+func __scale128_x10(_ _TMP:UInt128) -> UInt128 {
+    var _TMP2=UInt128(), _TMP8=UInt128()
+    _TMP2 = sll128(_TMP.hi, _TMP.lo, 1)
+    _TMP8 = sll128(_TMP.hi, _TMP.lo, 3)
+    __add_128_128(&_TMP2, _TMP2, _TMP8)
+    return _TMP2
+}
+
+func __scale128_div10(_ _TMP:UInt128) -> UInt128 {
+    var _TMP2=UInt128(), _TMP8=UInt128()
+    __add_128_128(&_TMP2, _TMP2, _TMP8)
+    _TMP2 = srl128(_TMP.hi, _TMP.lo, 1)
+    _TMP8 = srl128(_TMP.hi, _TMP.lo, 3)
+    __add_128_128(&_TMP2, _TMP2, _TMP8)
+    return _TMP2
+}
+
+func bid___div_128_by_128 (_ pCQ: inout UInt128, _ pCR: inout UInt128, _ CX0:UInt128, _ CY:UInt128) {
+    if CX0.hi == 0 && CY.hi == 0 {
+        pCQ.lo = CX0.lo / CY.lo
+        pCQ.hi = 0
+        pCR.hi = 0; pCR.lo = 0
+        pCR.lo = CX0.lo - pCQ.lo * CY.lo
+        return
+    }
+    
+    var CX = CX0, Q = UInt64()
+    
+    // 2^64
+    let t64 = Double(bitPattern: 0x43f0000000000000)
+    var lx = Double(CX.hi) * t64 + Double(CX.lo)
+    let ly = Double(CY.hi) * t64 + Double(CY.lo)
+    var lq = lx / ly
+    
+    var CY36 = UInt128(), CQ = UInt128(), A2 = UInt128()
+    CY36.hi = CY.lo >> (64 - 36);
+    CY36.lo = CY.lo << 36;
+    
+    CQ.hi = 0; CQ.lo = 0;
+    
+    // Q >= 2^100 ?
+    if (CY.hi == 0 && CY36.hi == 0 && (CX.hi >= CY36.lo)) {
+        // then Q >= 2^100
+        
+        // 2^(-60)*CX/CY
+        let d60 = Double(bitPattern: 0x3c30000000000000)
+        lq *= d60
+        Q = UInt64(lq - 4)
+        
+        // Q*CY
+        __mul_64x64_to_128(&A2, Q, CY.lo);
+        
+        // A2 <<= 60
+        A2.hi = (A2.hi << 60) | (A2.lo >> (64 - 60));
+        A2.lo <<= 60;
+        
+        __sub_128_128(&CX, CX, A2);
+        
+        lx = Double(CX.hi) * t64 + Double(CX.lo)
+        lq = lx / ly
+        
+        CQ.hi = Q >> (64 - 60);
+        CQ.lo = Q << 60;
+    }
+    
+    var CY51 = UInt128(), CQT = UInt128()
+    CY51.hi = (CY.hi << 51) | (CY.lo >> (64 - 51));
+    CY51.lo = CY.lo << 51;
+    
+    if (CY.hi < (UInt64(1) << (64 - 51)) && (__unsigned_compare_gt_128(CX, CY51))) {
+        // Q > 2^51
+        
+        // 2^(-49)*CX/CY
+        let d49 = Double(bitPattern: 0x3ce0000000000000)
+        lq *= d49
+        
+        Q = UInt64(lq) - 1
+        
+        // Q*CY
+        __mul_64x64_to_128(&A2, Q, CY.lo);
+        A2.hi += Q * CY.hi;
+        
+        // A2 <<= 49
+        A2.hi = (A2.hi << 49) | (A2.lo >> (64 - 49));
+        A2.lo <<= 49;
+        
+        __sub_128_128(&CX, CX, A2);
+        
+        CQT.hi = Q >> (64 - 49);
+        CQT.lo = Q << 49;
+        __add_128_128(&CQ, CQ, CQT);
+        
+        lx = Double(CX.hi) * t64 + Double(CX.lo)
+        lq = lx / ly
+    }
+    
+    Q = UInt64(lq)
+    
+    __mul_64x64_to_128(&A2, Q, CY.lo);
+    A2.hi += Q * CY.hi;
+    
+    __sub_128_128(&CX, CX, A2);
+    if (Int(CX.hi) < 0) {
+        Q-=1
+        CX.lo += CY.lo;
+        if (CX.lo < CY.lo) {
+            CX.hi+=1
+        }
+        CX.hi += CY.hi;
+        if (Int(CX.hi) < 0) {
+            Q-=1
+            CX.lo += CY.lo;
+            if (CX.lo < CY.lo) {
+                CX.hi+=1
+            }
+            CX.hi += CY.hi
+        }
+    } else if (__unsigned_compare_ge_128(CX, CY)) {
+        Q+=1
+        __sub_128_128(&CX, CX, CY)
+    }
+    
+    __add_128_64(&CQ, CQ, Q);
+    pCQ = CQ; pCR = CX
 }
 
 /*********************************************************************
@@ -617,33 +743,33 @@ func __mul_128x64_to_128(_ Q128: inout UInt128, _ A64:UInt64, _ B128:UInt128) {
  *********************************************************************/
 // add 64-bit value to 128-bit
 func __add_128_64(_ R128:inout UInt128, _ A128:UInt128, _ B64:UInt64) {
-    var R64H = A128.w[1]
-    R128.w[0] = B64 &+ A128.w[0]
-    if R128.w[0] < B64 {
+    var R64H = A128.hi
+    R128.lo = B64 &+ A128.lo
+    if R128.lo < B64 {
         R64H += 1
     }
-    R128.w[1] = R64H
+    R128.hi = R64H
 }
 
 func __sub_128_128(_ R128:inout UInt128, _ A128:UInt128, _ B128:UInt128) {
     var Q128 = UInt128()
-    Q128.w[1] = A128.w[1] - B128.w[1]
-    Q128.w[0] = A128.w[0] - B128.w[0]
-    if A128.w[0] < B128.w[0] {
-        Q128.w[1] -= 1
+    Q128.hi = A128.hi - B128.hi
+    Q128.lo = A128.lo &- B128.lo
+    if A128.lo < B128.lo {
+        Q128.hi -= 1
     }
-    R128.w[1] = Q128.w[1]
-    R128.w[0] = Q128.w[0]
+    R128.hi = Q128.hi
+    R128.lo = Q128.lo
 }
 
 // add 128-bit value to 128-bit
 // assume no carry-out
 func __add_128_128(_ R128:inout UInt128, _ A128:UInt128, _ B128:UInt128) {
     var Q128 = UInt128()
-    Q128.w[1] = A128.w[1] + B128.w[1]
-    Q128.w[0] = B128.w[0] &+ A128.w[0]
-    if Q128.w[0] < B128.w[0] {
-        Q128.w[1] += 1
+    Q128.hi = A128.hi + B128.hi
+    Q128.lo = B128.lo &+ A128.lo
+    if Q128.lo < B128.lo {
+        Q128.hi += 1
     }
     R128 = Q128
 }
@@ -663,7 +789,7 @@ func __add_128_128(_ R128:inout UInt128, _ A128:UInt128, _ B128:UInt128) {
 // 64x64-bit product
 func __mul_64x64_to_128MACH(_ P128: inout UInt128, _ CX:UInt64, _ CY:UInt64)  {
     let res = CX.multipliedFullWidth(by: CY)
-    P128.w[1] = res.high; P128.w[0] = res.low
+    P128.hi = res.high; P128.lo = res.low
 //  BID_UINT64 CXH,CXL,CYH,CYL,PL,PH,PM,PM2;
 //  CXH = (CX64) >> 32;
 //  CXL = (BID_UINT32)(CX64);
@@ -675,6 +801,6 @@ func __mul_64x64_to_128MACH(_ P128: inout UInt128, _ CX:UInt64, _ CY:UInt64)  {
 //  PM2 = CXL*CYH;
 //  PH += (PM>>32);
 //  PM = (BID_UINT64)((BID_UINT32)PM)+PM2+(PL>>32);
-//  (P128).w[1] = PH + (PM>>32);
-//  (P128).w[0] = (PM<<32)+(BID_UINT32)PL;
+//  (P128).hi = PH + (PM>>32);
+//  (P128).lo = (PM<<32)+(BID_UINT32)PL;
 }

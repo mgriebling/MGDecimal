@@ -98,9 +98,17 @@ final class MGDecimalTests: XCTestCase {
         let y1 = Decimal128(stringLiteral: s); XCTAssert(y1.description == "12345678901234567890.12345678901235")
         print("\(s) -> \(y1)")
         
-        let n = UInt128(upper: 0xA207_8000_0000_0000, lower:0x0000_0000_0000_03D0)
+        let n = UInt128(upper: 0xA207_8000_0000_0000, lower: 0x0000_0000_0000_03D0)
         let a = Decimal128(dpd128: n); XCTAssert(a.description == "-7.50")
         print(a, a.dpd128, a.dpd128 == n ? "a = n" : "a != n"); XCTAssert(a.dpd128 == n)
+    }
+    
+    func testUInt128() throws {
+        let y : UInt128 = "0xA207_8000_0000_0000_0000_0000_0000_03D0"
+        let x : UInt128 = "1_000_000_000_000_000_000_000_000_000_000"
+        XCTAssert(x.description == "1000000000000000000000000000000")
+        XCTAssert(y.description == "215373877543595382617630722487884973008")
+        print(x, y)
     }
     
 }

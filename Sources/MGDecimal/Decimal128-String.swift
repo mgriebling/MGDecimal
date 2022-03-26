@@ -12,17 +12,17 @@ extension Decimal128 {
     static func bid128_to_string (_ x: UInt128, _ showPlus: Bool = false) -> String {
         //  save_fpsf = *pfpsf; // dummy
         let plus = showPlus ? "+" : ""
-        let sign = (x.w[1] & MASK_SIGN) != 0 ? "-" : plus
+        let sign = (x.hi & MASK_SIGN) != 0 ? "-" : plus
         var x = x
         var str = ""
         var C1 = UInt128()
         BID_SWAP128(&x)
         
         // check for NaN or Infinity
-        if (x.w[1] & MASK_SPECIAL) == MASK_SPECIAL {
+        if (x.hi & MASK_SPECIAL) == MASK_SPECIAL {
             // x is special
-            if (x.w[1] & MASK_NAN) == MASK_NAN {
-                if (x.w[1] & MASK_SNAN) == MASK_SNAN {
+            if (x.hi & MASK_NAN) == MASK_NAN {
+                if (x.hi & MASK_SNAN) == MASK_SNAN {
                     str = "SNaN" // x is SNAN
                 } else {
                     str = "NaN"  // x is QNaN
@@ -31,27 +31,27 @@ extension Decimal128 {
                 str = "Inf"
             }
             return sign + str
-        } else if (x.w[1] & MASK_COEFF) == 0x0 && x.w[0] == 0x0 {
+        } else if (x.hi & MASK_COEFF) == 0x0 && x.lo == 0x0 {
             //determine if +/-
             return sign + "0"
         } else { // x is not special and is not zero
             // unpack x
-            // let x_sign = x.w[1] & MASK_SIGN // 0 for positive, MASK_SIGN for negative
-            var x_exp = x.w[1] & MASK_EXP   // biased and shifted left 49 bit positions
-            if (x.w[1] & MASK_STEERING_BITS) == MASK_STEERING_BITS {
-                x_exp = (x.w[1]<<2) & MASK_EXP // biased and shifted left 49 bit positions
+            // let x_sign = x.hi & MASK_SIGN // 0 for positive, MASK_SIGN for negative
+            var x_exp = x.hi & MASK_EXP   // biased and shifted left 49 bit positions
+            if (x.hi & MASK_STEERING_BITS) == MASK_STEERING_BITS {
+                x_exp = (x.hi<<2) & MASK_EXP // biased and shifted left 49 bit positions
             }
-            C1.w[1] = x.w[1] & MASK_COEFF
-            C1.w[0] = x.w[0]
+            C1.hi = x.hi & MASK_COEFF
+            C1.lo = x.lo
             
             // determine coefficient"s representation as a decimal string
             // if zero or non-canonical, set coefficient to "0"
-            if (C1.w[1] > 0x0001ed09bead87c0) || (C1.w[1] == 0x0001ed09bead87c0 && C1.w[0] > 0x378d8e63ffffffff) ||
-               (x.w[1] & MASK_STEERING_BITS) == MASK_STEERING_BITS || (C1.w[1] == 0 && C1.w[0] == 0) {
+            if (C1.hi > 0x0001ed09bead87c0) || (C1.hi == 0x0001ed09bead87c0 && C1.lo > 0x378d8e63ffffffff) ||
+               (x.hi & MASK_STEERING_BITS) == MASK_STEERING_BITS || (C1.hi == 0 && C1.lo == 0) {
                 str += "0"
             } else {
                 /* ****************************************************
-                 This takes a bid coefficient in C1.w[1],C1.w[0]
+                 This takes a bid coefficient in C1.hi,C1.lo
                  and put the converted character sequence at location
                  starting at &(str[k]). The function returns the number
                  of MiDi returned. Note that the character sequence
@@ -65,23 +65,23 @@ extension Decimal128 {
                  18 digits. (The high can have at most 16 digits). It then
                  uses macro that handle 18 digit portions.
                  The first step is to get hi and lo such that
-                 2^(64) C1.w[1] + C1.w[0] = hi * 10^18  + lo,   0 <= lo < 10^18.
+                 2^(64) C1.hi + C1.lo = hi * 10^18  + lo,   0 <= lo < 10^18.
                  We use a table lookup method to obtain the hi and lo 18 digits.
-                 [C1.w[1],C1.w[0]] = c_8 2^(107) + c_7 2^(101) + ... + c_0 2^(59) + d
+                 [C1.hi,C1.lo] = c_8 2^(107) + c_7 2^(101) + ... + c_0 2^(59) + d
                  where 0 <= d < 2^59 and each c_j has 6 bits. Because d fits in
                  18 digits,  we set hi = 0, and lo = d to begin with.
                  We then retrieve from a table, for j = 0, 1, ..., 8
                  that gives us A and B where c_j 2^(59+6j) = A * 10^18 + B.
                  hi += A ; lo += B; After each accumulation into lo, we normalize
                  immediately. So at the end, we have the decomposition as we need. */
-                var Tmp = C1.w[0] >> 59
-                var LO_18Dig = (C1.w[0] << 5) >> 5
-                Tmp += (C1.w[1] << 5)
+                var Tmp = C1.lo >> 59
+                var LO_18Dig = (C1.lo << 5) >> 5
+                Tmp += (C1.hi << 5)
                 var HI_18Dig = UInt64(0)
                 var k_lcv = 0
                 
-                // Tmp = {C1.w[1]{49:0}, C1.w[0]{63:59}}
-                // Lo_18Dig = {C1.w[0]{58:0}}
+                // Tmp = {C1.hi{49:0}, C1.lo{63:59}}
+                // Lo_18Dig = {C1.lo{58:0}}
                 while Tmp != 0 {
                     var midi_ind = Int(Tmp & 0x000000000000003F)
                     midi_ind <<= 1
@@ -122,8 +122,8 @@ extension Decimal128 {
         
         // if null string, return NaN
         if ps.isEmpty {
-            res.w[1] = MASK_NAN
-            res.w[0] = 0
+            res.hi = MASK_NAN
+            res.lo = 0
             return res
         }
         
@@ -136,43 +136,43 @@ extension Decimal128 {
         // if c is null or not equal to a (radix point, negative sign,
         // positive sign, or number) it might be SNaN, sNaN, Infinity
         if c == "\0" || (c != "." && c != "-" && c != "+" && !c.isWholeNumber) {
-            res.w[0] = 0
+            res.lo = 0
             // Infinity?
             if c == "i" && (ps.hasPrefix("nfinity") || ps.hasPrefix("nf")) {
-                res.w[1] = MASK_INF
+                res.hi = MASK_INF
                 return res
             }
             // return sNaN
             if c == "s" && ps.hasPrefix("nan") {
                 // case insensitive check for snan
-                res.w[1] = MASK_SNAN // 0x7e00000000000000
+                res.hi = MASK_SNAN // 0x7e00000000000000
                 return res
             } else {
                 // return qNaN
-                res.w[1] = MASK_NAN // 0x7c00000000000000
+                res.hi = MASK_NAN // 0x7c00000000000000
                 return res
             }
         }
         // if +Inf, -Inf, +Infinity, or -Infinity (case insensitive check for inf)
         if ps.hasPrefix("infinity") || ps.hasPrefix("inf") { // ci check for infinity
-            res.w[0] = 0
+            res.lo = 0
             if c == "+" {
-                res.w[1] = MASK_INF // 0x7800000000000000
+                res.hi = MASK_INF // 0x7800000000000000
             } else if c == "-" {
-                res.w[1] = MASK_INF | MASK_SIGN  // 0xf800000000000000
+                res.hi = MASK_INF | MASK_SIGN  // 0xf800000000000000
             } else {
-                res.w[1] = MASK_NAN // 0x7c00000000000000
+                res.hi = MASK_NAN // 0x7c00000000000000
             }
             return res
         }
         
         // if +sNaN, +SNaN, -sNaN, or -SNaN
         if ps.hasPrefix("snan") {
-            res.w[0] = 0
+            res.lo = 0
             if c == "-"  {
-                res.w[1] = MASK_SNAN | MASK_SIGN  // 0xfe00000000000000
+                res.hi = MASK_SNAN | MASK_SIGN  // 0xfe00000000000000
             } else {
-                res.w[1] = MASK_SNAN // 0x7e00000000000000
+                res.hi = MASK_SNAN // 0x7e00000000000000
             }
             return res
         }
@@ -191,8 +191,8 @@ extension Decimal128 {
         
         // if c isn't a decimal point or a decimal digit, return NaN
         if c != "." && !c.isWholeNumber {
-            res.w[1] = MASK_NAN | sign_x
-            res.w[0] = 0
+            res.hi = MASK_NAN | sign_x
+            res.lo = 0
             return res
         }
         if c == "." {
@@ -221,21 +221,21 @@ extension Decimal128 {
                         // if this is the first radix point, and the next character is NULL,
                         // we have a zero
                         if ps.isEmpty {
-                            res.w[1] = UInt64(0x3040000000000000 - (right_radix_leading_zeros << 49)) | sign_x
-                            res.w[0] = 0
+                            res.hi = UInt64(0x3040000000000000 - (right_radix_leading_zeros << 49)) | sign_x
+                            res.lo = 0
                             return res
                         }
                         c = ps.isEmpty ? "\0" : ps.removeFirst()
                     } else {
                         // if 2 radix points, return NaN
-                        res.w[1] =  MASK_NAN | sign_x // 0x7c00000000000000
-                        res.w[0] = 0
+                        res.hi =  MASK_NAN | sign_x // 0x7c00000000000000
+                        res.lo = 0
                         return res
                     }
                 } else if !ps.isEmpty {
                     if right_radix_leading_zeros > DECIMAL_EXPONENT_BIAS_128 { right_radix_leading_zeros = DECIMAL_EXPONENT_BIAS_128 }
-                    res.w[1] = UInt64(0x3040000000000000 - (right_radix_leading_zeros << 49)) | sign_x
-                    res.w[0] = 0
+                    res.hi = UInt64(0x3040000000000000 - (right_radix_leading_zeros << 49)) | sign_x
+                    res.lo = 0
                     return res
                 }
             }
@@ -308,16 +308,16 @@ extension Decimal128 {
         if c != "\0" {
             if c != "e" {
                 // return NaN
-                res.w[1] = MASK_NAN //0x7c00000000000000
-                res.w[0] = 0
+                res.hi = MASK_NAN //0x7c00000000000000
+                res.lo = 0
                 return res
             }
             c = ps.isEmpty ? "\0" : ps.removeFirst()
             
             if !c.isWholeNumber && ((c != "+" && c != "-") || !c.isWholeNumber) {
                 // return NaN
-                res.w[1] = MASK_NAN //0x7c00000000000000
-                res.w[0] = 0
+                res.hi = MASK_NAN //0x7c00000000000000
+                res.lo = 0
                 return res
             }
             
@@ -353,20 +353,20 @@ extension Decimal128 {
         if ndigits_total <= MAX_FORMAT_DIGITS_128 {
             dec_expon += DECIMAL_EXPONENT_BIAS_128 - ndigits_after - right_radix_leading_zeros
             if dec_expon < 0 {
-                res.w[1] = 0 | sign_x
-                res.w[0] = 0
+                res.hi = 0 | sign_x
+                res.lo = 0
             }
             if ndigits_total == 0 {
-                CX.w[0] = 0
-                CX.w[1] = 0
+                CX.lo = 0
+                CX.hi = 0
             } else if ndigits_total <= 19 {
                 coeff_high = dbuffer[0]
                 for i in 1..<ndigits_total {
                     let coeff2 = coeff_high + coeff_high
                     coeff_high = (coeff2 << 2) + coeff2 + dbuffer[i]
                 }
-                CX.w[0] = coeff_high
-                CX.w[1] = 0
+                CX.lo = coeff_high
+                CX.hi = 0
             } else {
                 coeff_high = dbuffer[0]
                 var iv = ndigits_total-17
@@ -385,9 +385,9 @@ extension Decimal128 {
                 let scale_high = UInt64(100000000000000000)
                 __mul_64x64_to_128_fast(&CX, coeff_high, scale_high)
                 
-                CX.w[0] += coeff_low;
-                if CX.w[0] < coeff_low {
-                    CX.w[1]+=1
+                CX.lo += coeff_low;
+                if CX.lo < coeff_low {
+                    CX.hi+=1
                 }
             }
             return bid_get_BID128(sign_x, dec_expon, CX, rnd_mode, &pfpsf)
@@ -396,8 +396,8 @@ extension Decimal128 {
             dec_expon += ndigits_before + DECIMAL_EXPONENT_BIAS_128 - MAX_FORMAT_DIGITS_128 - right_radix_leading_zeros
             
             if dec_expon < 0 {
-                res.w[1] = 0 | sign_x
-                res.w[0] = 0
+                res.hi = 0 | sign_x
+                res.lo = 0
             }
             
             coeff_high = dbuffer[0]
@@ -482,9 +482,9 @@ extension Decimal128 {
             __mul_64x64_to_128_fast(&CX, coeff_high, scale_high)
             
             coeff_low += carry
-            CX.w[0] += coeff_low
-            if CX.w[0] < coeff_low {
-                CX.w[1]+=1
+            CX.lo += coeff_low
+            if CX.lo < coeff_low {
+                CX.hi+=1
             }
             
             if set_inexact {

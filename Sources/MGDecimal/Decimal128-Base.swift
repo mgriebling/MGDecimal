@@ -49,8 +49,8 @@ extension Decimal128 {
     
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // MARK: - Numeric State variables
-    var sign: FloatingPointSign { x.w[1] & Decimal128.MASK_SIGN != 0 ? .minus : .plus }
-    var magnitude: Decimal128   { Decimal128(raw: UInt128(w: [x.w[0], x.w[1] & ~Decimal128.MASK_SIGN])) }
+    var sign: FloatingPointSign { x.hi & Decimal128.MASK_SIGN != 0 ? .minus : .plus }
+    var magnitude: Decimal128   { Decimal128(raw: UInt128(w: [x.lo, x.hi & ~Decimal128.MASK_SIGN])) }
     var decimal32: Decimal32    { Decimal32(raw: Decimal128.bid128_to_bid32(x, Decimal128.rounding, &Decimal128.state)) }
     var decimal64: Decimal64    { Decimal64(raw: Decimal128.bid128_to_bid64(x, Decimal128.rounding, &Decimal128.state)) }
     var dpd128: UInt128         { Decimal128.bid_to_dpd128(x) }
@@ -97,12 +97,3 @@ extension Decimal128 /* : FloatingPoint */ {
     
 }
 
-extension Decimal128 /* : BinaryFloatingPoint */ {
-    
-    public static var exponentBitCount: Int { 0 }
-    
-    public static var significandBitCount: Int { 0 }
-    
-    public var significandWidth: Int { 0 } /* TBD */
-    
-}

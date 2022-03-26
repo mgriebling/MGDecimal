@@ -157,18 +157,18 @@ extension Decimal64 {
                     // n = C* * 10^(e+x)
                     
                     if (ind - 1 <= 2) {    // 0 <= ind - 1 <= 2 => shift = 0
-                        res = P128.w[1]
-                        fstar.w[1] = 0
-                        fstar.w[0] = P128.w[0]
+                        res = P128.hi
+                        fstar.hi = 0
+                        fstar.lo = P128.lo
                     } else if (ind - 1 <= 21) {    // 3 <= ind - 1 <= 21 => 3 <= shift <= 63
                         let shift = bid_shiftright128[ind - 1]    // 3 <= shift <= 63
-                        res = (P128.w[1] >> shift)
-                        fstar.w[1] = P128.w[1] & bid_maskhigh128[ind - 1]
-                        fstar.w[0] = P128.w[0]
+                        res = (P128.hi >> shift)
+                        fstar.hi = P128.hi & bid_maskhigh128[ind - 1]
+                        fstar.lo = P128.lo
                     }
                     // if (0 < f* < 10^(-x)) then the result is a midpoint
                     // since round_to_even, subtract 1 if current result is odd
-                    if (res & 0x0000000000000001 != 0) && (fstar.w[1] == 0) && (fstar.w[0] < bid_ten2mk64[ind - 1]) {
+                    if (res & 0x0000000000000001 != 0) && (fstar.hi == 0) && (fstar.lo < bid_ten2mk64[ind - 1]) {
                         res -= 1
                     }
                     // determine inexactness of the rounding of C*
@@ -177,10 +177,10 @@ extension Decimal64 {
                     // else // if (f* - 1/2 > T*) then
                     //   the result is inexact
                     if (ind - 1 <= 2) {
-                        if (fstar.w[0] > 0x8000000000000000) {
+                        if (fstar.lo > 0x8000000000000000) {
                             // f* > 1/2 and the result may be exact
-                            // fstar.w[0] - 0x8000000000000000 is f* - 1/2
-                            if ((fstar.w[0] - 0x8000000000000000) > bid_ten2mk64[ind - 1]) {
+                            // fstar.lo - 0x8000000000000000 is f* - 1/2
+                            if ((fstar.lo - 0x8000000000000000) > bid_ten2mk64[ind - 1]) {
                                 // set the inexact flag
                                 pfpsf.insert(.inexact)
                             }    // else the result is exact
@@ -189,10 +189,10 @@ extension Decimal64 {
                             pfpsf.insert(.inexact)
                         }
                     } else {    // if 3 <= ind - 1 <= 21
-                        if fstar.w[1] > bid_onehalf128[ind - 1] || (fstar.w[1] == bid_onehalf128[ind - 1] && fstar.w[0] != 0) {
+                        if fstar.hi > bid_onehalf128[ind - 1] || (fstar.hi == bid_onehalf128[ind - 1] && fstar.lo != 0) {
                             // f2* > 1/2 and the result may be exact
                             // Calculate f2* - 1/2
-                            if fstar.w[1] > bid_onehalf128[ind - 1] || fstar.w[0] > bid_ten2mk64[ind - 1] {
+                            if fstar.hi > bid_onehalf128[ind - 1] || fstar.lo > bid_ten2mk64[ind - 1] {
                                 // set the inexact flag
                                 pfpsf.insert(.inexact)
                             }    // else the result is exact
@@ -237,14 +237,14 @@ extension Decimal64 {
                     // n = C* * 10^(e+x)
                     
                     if ind - 1 <= 2 {    // 0 <= ind - 1 <= 2 => shift = 0
-                        res = P128.w[1]
-                        fstar.w[1] = 0
-                        fstar.w[0] = P128.w[0]
+                        res = P128.hi
+                        fstar.hi = 0
+                        fstar.lo = P128.lo
                     } else if ind - 1 <= 21 {    // 3 <= ind - 1 <= 21 => 3 <= shift <= 63
                         let shift = bid_shiftright128[ind - 1]    // 3 <= shift <= 63
-                        res = (P128.w[1] >> shift)
-                        fstar.w[1] = P128.w[1] & bid_maskhigh128[ind - 1]
-                        fstar.w[0] = P128.w[0]
+                        res = (P128.hi >> shift)
+                        fstar.hi = P128.hi & bid_maskhigh128[ind - 1]
+                        fstar.lo = P128.lo
                     }
                     // midpoints are already rounded correctly
                     // determine inexactness of the rounding of C*
@@ -253,10 +253,10 @@ extension Decimal64 {
                     // else // if (f* - 1/2 > T*) then
                     //   the result is inexact
                     if ind - 1 <= 2 {
-                        if fstar.w[0] > 0x8000000000000000 {
+                        if fstar.lo > 0x8000000000000000 {
                             // f* > 1/2 and the result may be exact
-                            // fstar.w[0] - 0x8000000000000000 is f* - 1/2
-                            if (fstar.w[0] - 0x8000000000000000) > bid_ten2mk64[ind - 1] {
+                            // fstar.lo - 0x8000000000000000 is f* - 1/2
+                            if (fstar.lo - 0x8000000000000000) > bid_ten2mk64[ind - 1] {
                                 // set the inexact flag
                                 pfpsf.insert(.inexact)
                             }    // else the result is exact
@@ -265,10 +265,10 @@ extension Decimal64 {
                             pfpsf.insert(.inexact)
                         }
                     } else {    // if 3 <= ind - 1 <= 21
-                        if fstar.w[1] > bid_onehalf128[ind - 1] || (fstar.w[1] == bid_onehalf128[ind - 1] && fstar.w[0] != 0) {
+                        if fstar.hi > bid_onehalf128[ind - 1] || (fstar.hi == bid_onehalf128[ind - 1] && fstar.lo != 0) {
                             // f2* > 1/2 and the result may be exact
                             // Calculate f2* - 1/2
-                            if fstar.w[1] > bid_onehalf128[ind - 1] || fstar.w[0] > bid_ten2mk64[ind - 1] {
+                            if fstar.hi > bid_onehalf128[ind - 1] || fstar.lo > bid_ten2mk64[ind - 1] {
                                 // set the inexact flag
                                 pfpsf.insert(.inexact)
                             }    // else the result is exact
@@ -307,17 +307,17 @@ extension Decimal64 {
                     // n = C* * 10^(e+x)
                     
                     if ind - 1 <= 2 {    // 0 <= ind - 1 <= 2 => shift = 0
-                        res = P128.w[1]
-                        fstar.w[1] = 0
-                        fstar.w[0] = P128.w[0]
+                        res = P128.hi
+                        fstar.hi = 0
+                        fstar.lo = P128.lo
                     } else if ind - 1 <= 21 {    // 3 <= ind - 1 <= 21 => 3 <= shift <= 63
                         let shift = bid_shiftright128[ind - 1]    // 3 <= shift <= 63
-                        res = (P128.w[1] >> shift)
-                        fstar.w[1] = P128.w[1] & bid_maskhigh128[ind - 1]
-                        fstar.w[0] = P128.w[0]
+                        res = (P128.hi >> shift)
+                        fstar.hi = P128.hi & bid_maskhigh128[ind - 1]
+                        fstar.lo = P128.lo
                     }
                     // if (f* > 10^(-x)) then the result is inexact
-                    if (fstar.w[1] != 0) || (fstar.w[0] >= bid_ten2mk64[ind - 1]) {
+                    if (fstar.hi != 0) || (fstar.lo >= bid_ten2mk64[ind - 1]) {
                         if x_sign != 0 {
                             // if negative and not exact, increment magnitude
                             res+=1
@@ -358,17 +358,17 @@ extension Decimal64 {
                     // n = C* * 10^(e+x)
                     
                     if ind - 1 <= 2 {    // 0 <= ind - 1 <= 2 => shift = 0
-                        res = P128.w[1]
-                        fstar.w[1] = 0
-                        fstar.w[0] = P128.w[0]
+                        res = P128.hi
+                        fstar.hi = 0
+                        fstar.lo = P128.lo
                     } else if ind - 1 <= 21 {    // 3 <= ind - 1 <= 21 => 3 <= shift <= 63
                         let shift = bid_shiftright128[ind - 1]    // 3 <= shift <= 63
-                        res = (P128.w[1] >> shift)
-                        fstar.w[1] = P128.w[1] & bid_maskhigh128[ind - 1]
-                        fstar.w[0] = P128.w[0]
+                        res = (P128.hi >> shift)
+                        fstar.hi = P128.hi & bid_maskhigh128[ind - 1]
+                        fstar.lo = P128.lo
                     }
                     // if (f* > 10^(-x)) then the result is inexact
-                    if (fstar.w[1] != 0) || (fstar.w[0] >= bid_ten2mk64[ind - 1]) {
+                    if (fstar.hi != 0) || (fstar.lo >= bid_ten2mk64[ind - 1]) {
                         if x_sign == 0 {
                             // if positive and not exact, increment magnitude
                             res+=1
@@ -409,17 +409,17 @@ extension Decimal64 {
                     // n = C* * 10^(e+x)
                     
                     if ind - 1 <= 2 {    // 0 <= ind - 1 <= 2 => shift = 0
-                        res = P128.w[1]
-                        fstar.w[1] = 0
-                        fstar.w[0] = P128.w[0]
+                        res = P128.hi
+                        fstar.hi = 0
+                        fstar.lo = P128.lo
                     } else if ind - 1 <= 21 {    // 3 <= ind - 1 <= 21 => 3 <= shift <= 63
                         let shift = bid_shiftright128[ind - 1]    // 3 <= shift <= 63
-                        res = (P128.w[1] >> shift)
-                        fstar.w[1] = P128.w[1] & bid_maskhigh128[ind - 1]
-                        fstar.w[0] = P128.w[0]
+                        res = (P128.hi >> shift)
+                        fstar.hi = P128.hi & bid_maskhigh128[ind - 1]
+                        fstar.lo = P128.lo
                     }
                     // if (f* > 10^(-x)) then the result is inexact
-                    if (fstar.w[1] != 0) || (fstar.w[0] >= bid_ten2mk64[ind - 1]) {
+                    if (fstar.hi != 0) || (fstar.lo >= bid_ten2mk64[ind - 1]) {
                         pfpsf.insert(.inexact)
                     }
                     // set exponent to zero as it was negative before.

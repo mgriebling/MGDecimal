@@ -125,7 +125,7 @@ extension Decimal32 {
         sign_ab = Int64(sign_ab) >> 63
         let CB = (Int64(coefficient_b) + sign_ab) ^ sign_ab
         
-        let SU = UInt64(coefficient_a) * bid_power10_table_128[diff_dec_expon].w[0]
+        let SU = UInt64(coefficient_a) * bid_power10_table_128[diff_dec_expon].lo
         var S = Int64(SU) + CB
         
         if S<0 {
@@ -143,7 +143,7 @@ extension Decimal32 {
             let tempx = Double(P)
             let bin_expon = Int((tempx.bitPattern & Decimal64.MASK_BINARY_EXPONENT) >> 52) - BINARY_EXPONENT_BIAS
             n_digits = Int(bid_estimate_decimal_digits[bin_expon])
-            if P >= bid_power10_table_128[n_digits].w[0] {
+            if P >= bid_power10_table_128[n_digits].lo {
                 n_digits+=1
             }
         }
@@ -167,10 +167,10 @@ extension Decimal32 {
         
         // now get P/10^extra_digits: shift Q_high right by M[extra_digits]-64
         let amount = bid_short_recip_scale[extra_digits]
-        var Q = Tmp.w[1] >> amount
+        var Q = Tmp.hi >> amount
         
         // remainder
-        let R = P - Q * bid_power10_table_128[extra_digits].w[0]
+        let R = P - Q * bid_power10_table_128[extra_digits].lo
         if R==bid_round_const_table[irmode][extra_digits] {
             status = []
         } else {
@@ -643,7 +643,7 @@ extension Decimal32 {
         let tempx = Double(P)
         let bin_expon_p = (Int(tempx.bitPattern & Decimal64.MASK_BINARY_EXPONENT) >> 52) - BINARY_EXPONENT_BIAS
         var n_digits = Int(bid_estimate_decimal_digits[bin_expon_p])
-        if P >= bid_power10_table_128[n_digits].w[0] {
+        if P >= bid_power10_table_128[n_digits].lo {
             n_digits+=1
         }
         
@@ -672,10 +672,10 @@ extension Decimal32 {
         
         // now get P/10^extra_digits: shift Q_high right by M[extra_digits]-64
         let amount = bid_short_recip_scale[extra_digits];
-        var Q = Tmp.w[1] >> amount
+        var Q = Tmp.hi >> amount
         
         // remainder
-        let R = P - Q * bid_power10_table_128[extra_digits].w[0]
+        let R = P - Q * bid_power10_table_128[extra_digits].lo
         
         if R == bid_round_const_table[rmode1][extra_digits] {
             status = []
@@ -697,7 +697,7 @@ extension Decimal32 {
 //                rmode1 = 3 - rmode1
 //            }
             
-            if ((R != 0) && (rmode == BID_ROUNDING_UP)) || ((rmode1&3 == 0) && (R+R>=bid_power10_table_128[extra_digits].w[0])) {
+            if ((R != 0) && (rmode == BID_ROUNDING_UP)) || ((rmode1&3 == 0) && (R+R>=bid_power10_table_128[extra_digits].lo)) {
                 return very_fast_get_BID32(sign_x^sign_y, 0, 1000000)
             }
         }
@@ -836,7 +836,7 @@ extension Decimal32 {
             let DU = (A - B) >> 31
             ed1 = 6 + Int(DU)
             ed2 = Int(bid_estimate_decimal_digits[bin_index]) + ed1
-            let T = bid_power10_table_128[ed1].w[0]
+            let T = bid_power10_table_128[ed1].lo
             CA = UInt64(A) * T
             
             Q = 0
@@ -862,11 +862,11 @@ extension Decimal32 {
             
             ed2 = 7 - Int(bid_estimate_decimal_digits[bin_expon_cx]) - Int(DU)
             
-            let T = bid_power10_table_128[ed2].w[0]
+            let T = bid_power10_table_128[ed2].lo
             CA = UInt64(R) * T
             B = coefficient_y
             
-            Q *= UInt32(bid_power10_table_128[ed2].w[0])
+            Q *= UInt32(bid_power10_table_128[ed2].lo)
             diff_expon -= ed2
         }
         
@@ -1025,7 +1025,7 @@ extension Decimal32 {
         var exponent_q = exponent_x + EXPONENT_BIAS - scale
         scale += (exponent_q & 1);    // exp. bias is even
         
-        let CT = bid_power10_table_128[scale].w[0]
+        let CT = bid_power10_table_128[scale].lo
         let CA = UInt64(coefficient_x) * CT
         let dq = Foundation.sqrt(Double(CA))
         
@@ -1147,7 +1147,7 @@ extension Decimal32 {
         let tempx = Double(coefficient_z)
         let bin_expon = Int(((tempx.bitPattern & Decimal64.MASK_BINARY_EXPONENT) >> 52)) - BINARY_EXPONENT_BIAS
         var scale_cz = Int(bid_estimate_decimal_digits[bin_expon])
-        if coefficient_z >= bid_power10_table_128[scale_cz].w[0] {
+        if coefficient_z >= bid_power10_table_128[scale_cz].lo {
             scale_cz+=1
         }
         
@@ -1155,7 +1155,7 @@ extension Decimal32 {
         if diff_expon < scale_k {
             scale_k = diff_expon
         }
-        coefficient_z *= UInt32(bid_power10_table_128[scale_k].w[0])
+        coefficient_z *= UInt32(bid_power10_table_128[scale_k].lo)
         
         return UInt64(get_BID32(sign_z, exponent_z - scale_k, coefficient_z, rounding_mode, &fpsc))
     }
@@ -1357,34 +1357,34 @@ extension Decimal32 {
         var sign_ab = Int64(sign_a ^ sign_b) << 32
         sign_ab = Int64(sign_ab) >> 63
         var CB = UInt128()
-        CB.w[0] = UInt64((Int64(coefficient_b) + sign_ab) ^ sign_ab)
-        CB.w[1] = UInt64(Int64(CB.w[0]) >> 63)
+        CB.lo = UInt64((Int64(coefficient_b) + sign_ab) ^ sign_ab)
+        CB.hi = UInt64(Int64(CB.lo) >> 63)
         
         var Tmp = UInt128(), P = UInt128()
         __mul_64x128_low(&Tmp, coefficient_a, bid_power10_table_128[diff_dec_expon])
         __add_128_128(&P, Tmp, CB)
-        if Int64(P.w[1]) < 0 {
+        if Int64(P.hi) < 0 {
             sign_a ^= SIGN_MASK32
-            P.w[1] = 0 - P.w[1]
-            if P.w[0] != 0 { P.w[1] -= 1 }
-            P.w[0] = 0 - P.w[0]
+            P.hi = 0 - P.hi
+            if P.lo != 0 { P.hi -= 1 }
+            P.lo = 0 - P.lo
         }
         
         var n_digits = 0
         var bin_expon = 0
-        if P.w[1] != 0 {
-            let tempx = Double(P.w[1])
+        if P.hi != 0 {
+            let tempx = Double(P.hi)
             bin_expon = Int((tempx.bitPattern & Decimal64.MASK_BINARY_EXPONENT) >> 52) - BINARY_EXPONENT_BIAS + 64
             n_digits = Int(bid_estimate_decimal_digits[bin_expon])
             if __unsigned_compare_ge_128(P, bid_power10_table_128[n_digits]) {
                 n_digits += 1
             }
         } else {
-            if P.w[0] != 0 {
-                let tempx = Double(P.w[0])
+            if P.lo != 0 {
+                let tempx = Double(P.lo)
                 bin_expon = Int((tempx.bitPattern & Decimal64.MASK_BINARY_EXPONENT) >> 52) - BINARY_EXPONENT_BIAS
                 n_digits = Int(bid_estimate_decimal_digits[bin_expon])
-                if P.w[0] >= bid_power10_table_128[n_digits].w[0] {
+                if P.lo >= bid_power10_table_128[n_digits].lo {
                     n_digits += 1
                 }
             } else { // result = 0
@@ -1396,7 +1396,7 @@ extension Decimal32 {
         }
         
         if n_digits <= MAX_DIGITS {
-            return get_BID32_UF (sign_a, exponent_b, P.w[0], 0, rmode, &pfpsf)
+            return get_BID32_UF (sign_a, exponent_b, P.lo, 0, rmode, &pfpsf)
         }
         
         let extra_digits = n_digits - 7
@@ -1415,7 +1415,7 @@ extension Decimal32 {
         if extra_digits <= 18 {
             __add_128_64(&P, P, bid_round_const_table[rmode1][extra_digits])
         } else {
-            __mul_64x64_to_128(&Stemp, bid_round_const_table[rmode1][18], bid_power10_table_128[extra_digits-18].w[0])
+            __mul_64x64_to_128(&Stemp, bid_round_const_table[rmode1][18], bid_power10_table_128[extra_digits-18].lo)
             __add_128_128 (&P, P, Stemp)
             if rmode == BID_ROUNDING_UP {
                 __add_128_64(&P, P, bid_round_const_table[rmode1][extra_digits-18])
@@ -1429,7 +1429,7 @@ extension Decimal32 {
         var amount = bid_recip_scale[extra_digits]
         __shr_128_long (&C128, Q_high, amount)
         
-        var C64 = C128.w[0]
+        var C64 = C128.lo
         var remainder_h, rem_l:UInt64
         if (C64 & 1) != 0 {
             // check whether fractional part of initial_P/10^extra_digits
@@ -1438,18 +1438,18 @@ extension Decimal32 {
             // (initial_P + 0.5*10^extra_digits)/10^extra_digits is exactly zero
             
             // get remainder
-            rem_l = Q_high.w[0]
+            rem_l = Q_high.lo
             if amount < 64 {
-                remainder_h = Q_high.w[0] << (64 - amount); rem_l = 0
+                remainder_h = Q_high.lo << (64 - amount); rem_l = 0
             } else {
-                remainder_h = Q_high.w[1] << (128 - amount)
+                remainder_h = Q_high.hi << (128 - amount)
             }
             
             // test whether fractional part is 0
             if ((remainder_h | rem_l) == 0
-                && (Q_low.w[1] < bid_reciprocals10_128[extra_digits].w[1]
-                    || (Q_low.w[1] == bid_reciprocals10_128[extra_digits].w[1]
-                        && Q_low.w[0] < bid_reciprocals10_128[extra_digits].w[0]))) {
+                && (Q_low.hi < bid_reciprocals10_128[extra_digits].hi
+                    || (Q_low.hi == bid_reciprocals10_128[extra_digits].hi
+                        && Q_low.lo < bid_reciprocals10_128[extra_digits].lo))) {
                 C64 -= 1
             }
         }
@@ -1458,30 +1458,30 @@ extension Decimal32 {
         var carry = UInt64(), CY = UInt64()
         
         // get remainder
-        rem_l = Q_high.w[0]
-        if amount < 64 { remainder_h = Q_high.w[0] << (64 - amount); rem_l = 0 }
-        else { remainder_h = Q_high.w[1] << (128 - amount) }
+        rem_l = Q_high.lo
+        if amount < 64 { remainder_h = Q_high.lo << (64 - amount); rem_l = 0 }
+        else { remainder_h = Q_high.hi << (128 - amount) }
         
         switch rmode {
             case BID_ROUNDING_TO_NEAREST, BID_ROUNDING_TIES_AWAY:
                 // test whether fractional part is 0
                 if ((remainder_h == 0x8000000000000000 && rem_l == 0)
-                    && (Q_low.w[1] < bid_reciprocals10_128[extra_digits].w[1]
-                        || (Q_low.w[1] == bid_reciprocals10_128[extra_digits].w[1]
-                            && Q_low.w[0] < bid_reciprocals10_128[extra_digits].w[0]))) {
+                    && (Q_low.hi < bid_reciprocals10_128[extra_digits].hi
+                        || (Q_low.hi == bid_reciprocals10_128[extra_digits].hi
+                            && Q_low.lo < bid_reciprocals10_128[extra_digits].lo))) {
                     status = []
                 }
             case BID_ROUNDING_DOWN, BID_ROUNDING_TO_ZERO:
                 if ((remainder_h | rem_l) == 0
-                    && (Q_low.w[1] < bid_reciprocals10_128[extra_digits].w[1]
-                        || (Q_low.w[1] == bid_reciprocals10_128[extra_digits].w[1]
-                            && Q_low.w[0] < bid_reciprocals10_128[extra_digits].w[0]))) {
+                    && (Q_low.hi < bid_reciprocals10_128[extra_digits].hi
+                        || (Q_low.hi == bid_reciprocals10_128[extra_digits].hi
+                            && Q_low.lo < bid_reciprocals10_128[extra_digits].lo))) {
                     status = []
                 }
             default:
                 // round up
-                __add_carry_out(&Stemp.w[0], &CY, Q_low.w[0], bid_reciprocals10_128[extra_digits].w[0])
-                __add_carry_in_out(&Stemp.w[1], &carry, Q_low.w[1], bid_reciprocals10_128[extra_digits].w[1], CY)
+                __add_carry_out(&Stemp.lo, &CY, Q_low.lo, bid_reciprocals10_128[extra_digits].lo)
+                __add_carry_in_out(&Stemp.hi, &carry, Q_low.hi, bid_reciprocals10_128[extra_digits].hi, CY)
                 if amount < 64 {
                     if ((remainder_h >> (64 - amount)) + carry >= (UInt64(1) << amount)) {
                         if !inexact {
@@ -1510,7 +1510,7 @@ extension Decimal32 {
             if extra_digits <= 18 {
                 __add_128_64 (&P, P, bid_round_const_table[rmode1][extra_digits]);
             } else {
-                __mul_64x64_to_128(&Stemp, bid_round_const_table[rmode1][18], bid_power10_table_128[extra_digits-18].w[0]);
+                __mul_64x64_to_128(&Stemp, bid_round_const_table[rmode1][18], bid_power10_table_128[extra_digits-18].lo);
                 __add_128_128(&P, P, Stemp)
                 if rmode == BID_ROUNDING_UP {
                     __add_128_64(&P, P, bid_round_const_table[rmode1][extra_digits-18]);
@@ -1523,7 +1523,7 @@ extension Decimal32 {
             amount = bid_recip_scale[extra_digits]
             __shr_128_long(&C128, Q_high, amount);
             
-            C64 = C128.w[0]
+            C64 = C128.lo
             if C64 == 10000000 {
                 return sign_a | 1000000
             }
@@ -1607,7 +1607,7 @@ extension Decimal32 {
                 return x
             }
             // set exponent of y to exponent_x, scale coefficient_y
-            let T = bid_power10_table_128[diff_expon].w[0];
+            let T = bid_power10_table_128[diff_expon].lo;
             let CYL = UInt64(coefficient_y) * T;
             if CYL > (UInt64(coefficient_x) << 1) {
                 return x
@@ -1634,7 +1634,7 @@ extension Decimal32 {
             let bin_expon = Int((tempx.bitPattern >> 23) & 0xff) - 0x7f
             let digits_x = Int(bid_estimate_decimal_digits[bin_expon])
             // will not use this test, dividend will have 18 or 19 digits
-            //if(CX >= bid_power10_table_128[digits_x].w[0])
+            //if(CX >= bid_power10_table_128[digits_x].lo)
             //      digits_x++;
             
             var e_scale = Int(18 - digits_x)
@@ -1646,7 +1646,7 @@ extension Decimal32 {
             }
             
             // scale dividend to 18 or 19 digits
-            CX *= bid_power10_table_128[e_scale].w[0]
+            CX *= bid_power10_table_128[e_scale].lo
             
             // quotient
             Q64 = CX / UInt64(coefficient_y)
