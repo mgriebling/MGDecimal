@@ -207,54 +207,44 @@ extension DecimalFloatingPoint {
     
     public // @testable
     static func _convert<Source: DecimalFloatingPoint>(from source: Source) -> (value: Self, exact: Bool) {
-        guard !source.isZero else {
-            return (source.sign == .minus ? -0.0 : 0, true)
-        }
+        let isMinus = source.sign == .minus
+        guard !source.isZero else { return (isMinus ? -0.0 : 0, true) }
         
         guard source.isFinite else {
-            if source.isInfinite {
-                return (source.sign == .minus ? -.infinity : .infinity, true)
-            }
+            if source.isInfinite { return (isMinus ? -.infinity : .infinity, true) }
+            
             // IEEE 754 requires that any NaN payload be propagated, if possible.
-//            let payload_ =
-//            source.significandBitPattern &
-//            ~(Source.nan.significandDigits |
-//              Source.signalingNaN.significandDigits)
-//            let mask =
-//            Self.greatestFiniteMagnitude.significandDigits &
-//            ~(Self.nan.significandDigits |
-//              Self.signalingNaN.significandDigits)
-//            let payload = Self.RawSignificand(truncatingIfNeeded: payload_) & mask
-//            // Although .signalingNaN.exponentBitPattern == .nan.exponentBitPattern,
-//            // we do not *need* to rely on this relation, and therefore we do not.
-//            let value = source.isSignalingNaN
-//            ? Self(
-//                sign: source.sign,
-//                exponentBitPattern: Self.signalingNaN.exponentBitPattern,
-//                significandBitPattern: payload |
-//                Self.signalingNaN.significandDigits)
-//            : Self(
-//                sign: source.sign,
-//                exponentBitPattern: Self.nan.exponentBitPattern,
-//                significandDigits: payload | Self.nan.significandDigits)
+            let digitsAllowed = Self.significandMaxDigitCount
+            let digitsAvailable = source.significandDigits.count
+            let payload = Array(source.significandDigits.dropLast(max(0,digitsAvailable-digitsAllowed)))
+
+            // Although .signalingNaN.exponentBitPattern == .nan.exponentBitPattern,
+            // we do not *need* to rely on this relation, and therefore we do not.
+            let value = source.isSignalingNaN
+            ? Self(
+                sign: source.sign,
+                exponentBitPattern: Self.signalingNaN.exponentBitPattern,
+                significandDigits: payload)
+            : Self(
+                sign: source.sign,
+                exponentBitPattern: Self.nan.exponentBitPattern,
+                significandDigits: payload)
             // We define exactness by equality after roundtripping; since NaN is never
             // equal to itself, it can never be converted exactly.
-            return (0, false)  /* TBD */
+            return (value, false)
         }
         
         let exponent = source.exponent
         var exemplar = Self.leastNormalMagnitude
-//        let exponentBitPattern: Self.RawExponent
-//        let leadingBitIndex: Int
-//        let shift: Int
-//        let significandDigits: [UInt8]
+        let exponentBitPattern: Self.RawExponent
+        let significandDigits = source.significandDigits
         
         if exponent < exemplar.exponent {
             // The floating-point result is either zero or subnormal.
             exemplar = Self.leastNonzeroMagnitude
             let minExponent = exemplar.exponent
             if exponent + 1 < minExponent {
-                return (source.sign == .minus ? -0.0 : 0, false)
+                return (isMinus ? -0.0 : 0, false)
             }
             if _slowPath(exponent + 1 == minExponent) {
                 // Although the most significant bit (MSB) of a subnormal source
@@ -267,43 +257,27 @@ extension DecimalFloatingPoint {
                 // Therefore, we do not need to adjust our work here for a subnormal
                 // source.
                 return source.significandDigitCount == 0
-                    ? (source.sign == .minus ? -0.0 : 0, false)
-                    : (source.sign == .minus ? -exemplar : exemplar, false)
+                    ? (isMinus ? -0.0 : 0, false)
+                    : (isMinus ? -exemplar : exemplar, false)
             }
             
-//            exponentBitPattern = 0 as Self.RawExponent
-//            leadingBitIndex = Int(Self.Exponent(exponent) - minExponent)
-//            shift = leadingBitIndex &- (source.significandDigitCount &+ source.significandDigits)
-//            let leadingBit = source.isNormal ? (1 as Self.RawSignificand) << leadingBitIndex : 0
-//            significandDigits = leadingBit | (shift >= 0
-//                                                  ? Self.RawSignificand(source.significandDigits) << shift
-//                                                  : Self.RawSignificand(source.significandDigits) >> -shift))
+            exponentBitPattern = 0 as Self.RawExponent
         } else {
             // The floating-point result is either normal or infinite.
             exemplar = Self.greatestFiniteMagnitude
             if exponent > exemplar.exponent {
-                return (source.sign == .minus ? -.infinity : .infinity, false)
+                return (isMinus ? -.infinity : .infinity, false)
             }
-            
-//            exponentBitPattern = exponent < 0
-//                ? (1 as Self).exponentBitPattern - Self.RawExponent(-exponent)
-//                : (1 as Self).exponentBitPattern + Self.RawExponent(exponent)
-//            leadingBitIndex = exemplar.significandDigitCount
-//            shift = leadingBitIndex &- (source.significandDigitCount &+ source.significandDigits)
-//            let sourceLeadingBit = source.isSubnormal
-//                ? (1 as Source.RawSignificand) << (source.significandDigitCount &+
-//                   source.significandDigits)
-//                : 0
-//            significandDigits = shift >= 0
-//                ? Self.RawSignificand(sourceLeadingBit ^ source.significandDigits) << shift
-//                : Self.RawSignificand((sourceLeadingBit ^ source.significandDigits) >> -shift)
+            exponentBitPattern = exponent < 0
+                ? (1 as Self).exponentBitPattern - Self.RawExponent(-exponent)
+                : (1 as Self).exponentBitPattern + Self.RawExponent(exponent)
         }
-//
-//        let value = Self(
-//            sign: source.sign,
-//            exponentBitPattern: exponentBitPattern,
-//            significandBitPattern: significandDigits)
-//
+
+        let value = Self(
+            sign: source.sign,
+            exponentBitPattern: exponentBitPattern,
+            significandDigits: significandDigits)
+
 //        if source.significandDigitCount <= leadingBitIndex {
 //            return (value, true)
 //        }
@@ -314,14 +288,13 @@ extension DecimalFloatingPoint {
 //        if truncatedBits < ulp / 2 {
 //            return (value, false)
 //        }
-//        let rounded = source.sign == .minus ? value.nextDown : value.nextUp
+//        let rounded = isMinus ? value.nextDown : value.nextUp
 //        if _fastPath(truncatedBits > ulp / 2) {
 //            return (rounded, false)
 //        }
 //        // If two representable values are equally close, we return the value with
 //        // more trailing zeros in its significand bit pattern.
-//        return significandDigits >
-//            rounded.significandDigits ? (value, false) : (rounded, false)
+//        return significandDigits > rounded.significandDigits ? (value, false) : (rounded, false)
         return (0, false)
     }
 
@@ -346,23 +319,23 @@ extension DecimalFloatingPoint {
     public init?<Source>(exactly value: Source) where Source : DecimalFloatingPoint {
         if value.isNaN { return nil }
         
-//        if (Source.exponentBitCount > Self.exponentBitCount
-//            || Source.significandMaxDigitCount > Self.significandMaxDigitCount)
-//            && value.isFinite && !value.isZero {
-//            let exponent = value.exponent
-//            if exponent < Self.leastNormalMagnitude.exponent {
-//                if exponent < Self.leastNonzeroMagnitude.exponent { return nil }
-//                if value.significandDigitCount >
-//                    Int(Self.Exponent(exponent) - Self.leastNonzeroMagnitude.exponent) {
-//                    return nil
-//                }
-//            } else {
-//                if exponent > Self.greatestFiniteMagnitude.exponent { return nil }
-//                if value.significandDigitCount > Self.greatestFiniteMagnitude.significandDigitCount {
-//                    return nil
-//                }
-//            }
-//        }
+        if (Source.exponentMaximum > Self.exponentMaximum ||
+            Source.significandMaxDigitCount > Self.significandMaxDigitCount) &&
+            value.isFinite && !value.isZero {
+            let exponent = value.exponent
+            if exponent < Self.leastNormalMagnitude.exponent {
+                if exponent < Self.leastNonzeroMagnitude.exponent { return nil }
+                if value.significandDigitCount >
+                    Int(Self.Exponent(exponent) - Self.leastNonzeroMagnitude.exponent) {
+                    return nil
+                }
+            } else {
+                if exponent > Self.greatestFiniteMagnitude.exponent { return nil }
+                if value.significandDigitCount > Self.greatestFiniteMagnitude.significandDigitCount {
+                    return nil
+                }
+            }
+        }
         
         self = Self(value)
     }
@@ -402,21 +375,21 @@ extension DecimalFloatingPoint {
         if sign != other.sign { return sign == .minus }
         
         // Handle Nan and infinity
-        if isNaN && !other.isNaN { print(self, " > ", other); return false }
-        if !isNaN && other.isNaN { print(self, " < ", other); return true }
-        if isInfinite && !other.isInfinite { print(self, " > ", other); return false }
-        if !isInfinite && other.isInfinite { print(self, " < ", other); return true }
+        if isNaN && !other.isNaN { return false }
+        if !isNaN && other.isNaN { return true }
+        if isInfinite && !other.isInfinite { return false }
+        if !isInfinite && other.isInfinite { return true }
         
         // Sign bits match; look at exponents.
-        if exponentBitPattern > other.exponentBitPattern { print(self, " < ", other); return sign == .minus }
-        if exponentBitPattern < other.exponentBitPattern { print(self, " > ", other); return sign == .plus }
+        if exponentBitPattern > other.exponentBitPattern { return sign == .minus }
+        if exponentBitPattern < other.exponentBitPattern { return sign == .plus }
         
         // Signs and exponents match, look at significands.
         if significandDigits.count > other.significandDigits.count {
-            print(self, " < ", other); return sign == .minus
+            return sign == .minus
         }
         if significandDigits.count < other.significandDigits.count {
-            print(self, " > ", other); return sign == .plus
+            return sign == .plus
         }
         
         // Same sized significands -- compare them
@@ -430,61 +403,51 @@ extension DecimalFloatingPoint {
 
 extension DecimalFloatingPoint {
     
+    
+    static func _decimalLogarithm<Source:BinaryInteger>(_ x:Source) -> (exp:Int, digits:[UInt8]) {
+        assert(x > (0 as Source))  // negatives and zero are illegal
+        var digits = [UInt8]()
+        let ten = (10 as Source)
+        var expx10 = 0
+        var n = x
+        while n > ten {
+            expx10 += 1
+            let x = n.quotientAndRemainder(dividingBy: ten)
+            digits.append(UInt8(x.remainder))
+            n = x.quotient
+        }
+        return (expx10, digits)
+    }
+    
     public // @testable
-    static func _convert<Source: BinaryInteger>(from source: Source) ->
-        (value: Self, exact: Bool) {
-//      //  Useful constants:
-//      let exponentBias = (1 as Self).exponentBitPattern
-//      let significandMask = ((1 as RawSignificand) << Self.significandMaxDigitCount) &- 1
-//      //  Zero is really extra simple, and saves us from trying to normalize a
-//      //  value that cannot be normalized.
-//      if _fastPath(source == 0) { return (0, true) }
-//      //  We now have a non-zero value; convert it to a strictly positive value
-//      //  by taking the magnitude.
-//      let magnitude = source.magnitude
-//      var exponent = magnitude._binaryLogarithm()
-//      //  If the exponent would be larger than the largest representable
-//      //  exponent, the result is just an infinity of the appropriate sign.
-//      guard exponent <= Self.greatestFiniteMagnitude.exponent else {
-//        return (Source.isSigned && source < 0 ? -.infinity : .infinity, false)
-//      }
-//      //  If exponent <= significandBitCount, we don't need to round it to
-//      //  construct the significand; we just need to left-shift it into place;
-//      //  the result is always exact as we've accounted for exponent-too-large
-//      //  already and no rounding can occur.
-//      if exponent <= Self.significandMaxDigitCount {
-//        let shift = Self.significandMaxDigitCount &- exponent
-//        let significand = RawSignificand(magnitude) &<< shift
-//        let value = Self(
-//          sign: Source.isSigned && source < 0 ? .minus : .plus,
-//          exponentBitPattern: exponentBias + RawExponent(exponent),
-//          significandBitPattern: significand
-//        )
-//        return (value, true)
-//      }
-//      //  exponent > significandBitCount, so we need to do a rounding right
-//      //  shift, and adjust exponent if needed
-//      let shift = exponent &- Self.significandMaxDigitCount
-//      let halfway = (1 as Source.Magnitude) << (shift - 1)
-//      let mask = 2 * halfway - 1
-//      let fraction = magnitude & mask
-//      var significand = RawSignificand(truncatingIfNeeded: magnitude >> shift) & significandMask
-//      if fraction > halfway || (fraction == halfway && significand & 1 == 1) {
-//        var carry = false
-//        (significand, carry) = significand.addingReportingOverflow(1)
-//        if carry || significand > significandMask {
-//          exponent += 1
-//          guard exponent <= Self.greatestFiniteMagnitude.exponent else {
-//            return (Source.isSigned && source < 0 ? -.infinity : .infinity, false)
-//          }
-//        }
-//      }
-//      return (Self(
-//        sign: Source.isSigned && source < 0 ? .minus : .plus,
-//        exponentBitPattern: exponentBias + RawExponent(exponent),
-//        significandBitPattern: significand
-//      ), fraction == 0)
-        return (0, false)
+    static func _convert<Source:BinaryInteger>(from source: Source) -> (value: Self, exact: Bool) {
+        //  Note: Self's exponent is x10ⁿ where n is the radix 10 exponent whereas Source's
+        //  exponent is x2ª where a is the radix 2 exponent.
+        //  Useful constants:
+        let exponentBias = (1 as Self).exponentBitPattern
+        
+        //  Zero is really extra simple, and saves us from trying to normalize a
+        //  value that cannot be normalized.
+        if _fastPath(source == 0) { return (0, true) }
+        
+        //  We now have a non-zero value; convert it to a strictly positive value
+        //  by taking the magnitude.
+        let expMag = _decimalLogarithm(source.magnitude)  // need a x10ⁿ exponent & mantissa digits
+        
+        //  If the exponent would be larger than the largest representable
+        //  exponent, the result is just an infinity of the appropriate sign.
+        guard expMag.exp <= Self.greatestFiniteMagnitude.exponent else {
+            return (Source.isSigned && source < 0 ? -.infinity : .infinity, false)
+        }
+        
+        //  Rounding occurs automatically based on the number of
+        //  significandDigits in the initializer.
+        let value = Self(
+            sign: Source.isSigned && source < 0 ? .minus : .plus,
+            exponentBitPattern: exponentBias,
+            significandDigits: expMag.digits
+        )
+        return (value, expMag.exp <= Self.significandMaxDigitCount)
     }
 
     /// Creates a new value, rounded to the closest possible representation.
@@ -493,7 +456,7 @@ extension DecimalFloatingPoint {
     /// with more trailing zeros in its significand bit pattern.
     ///
     /// - Parameter value: The integer to convert to a floating-point value.
-    @inlinable public init<Source>(_ value: Source) where Source : BinaryInteger {
+    @inlinable public init<Source:BinaryInteger>(_ value: Source) {
         self = Self._convert(from: value).value
     }
 

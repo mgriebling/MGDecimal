@@ -38,7 +38,7 @@ extension Decimal64 {
         }
         
         // if zero or non-canonical, set coefficient to "0"
-        if coefficient_x > BID64_SIG_MAX || coefficient_x == 0 {
+        if coefficient_x > MAX_NUMBER || coefficient_x == 0 {
             // non-canonical or significand is zero
             ps = sign_x != 0 ? "-" : plus
             ps += "0"
@@ -91,7 +91,7 @@ extension Decimal64 {
                 __L0_MiDi2Str(MiDi[k_lcv], &ps)
             }
             
-            exponent_x -= DECIMAL_EXPONENT_BIAS - (ps.count - 1)
+            exponent_x -= EXPONENT_BIAS - (ps.count - 1)
             return (sign_x != 0 ? "-" : plus) + addDecimalPointAndExponent(ps, exponent_x, MAX_DIGITS)
         }
         return (sign_x != 0 ? "-" : plus) + ps
@@ -190,7 +190,7 @@ extension Decimal64 {
                         // if this is the first radix point, and the next character is NULL,
                         // we have a zero
                         if ps.isEmpty {
-                            return (UInt64(DECIMAL_EXPONENT_BIAS - right_radix_leading_zeros) << 53) | sign_x
+                            return (UInt64(EXPONENT_BIAS - right_radix_leading_zeros) << 53) | sign_x
                         }
                         c = ps.isEmpty ? "\0" : ps.removeFirst()
                     } else {
@@ -199,7 +199,7 @@ extension Decimal64 {
                     }
                 } else if !ps.isEmpty {
                     //pres->w[1] = 0x3040000000000000 | sign_x;
-                    return (UInt64(DECIMAL_EXPONENT_BIAS - right_radix_leading_zeros) << 53) | sign_x
+                    return (UInt64(EXPONENT_BIAS - right_radix_leading_zeros) << 53) | sign_x
                 }
             }
         }
@@ -275,7 +275,7 @@ extension Decimal64 {
             if rounded {
                 pfpsf.insert(.inexact)
             }
-            return fast_get_BID64_check_OF(sign_x, add_expon+DECIMAL_EXPONENT_BIAS, coefficient_x, .toNearestOrEven, &pfpsf)
+            return fast_get_BID64_check_OF(sign_x, add_expon+EXPONENT_BIAS, coefficient_x, .toNearestOrEven, &pfpsf)
         }
         
         if c != "e" {
@@ -314,7 +314,7 @@ extension Decimal64 {
             expon_x = -expon_x
         }
         
-        expon_x += add_expon + DECIMAL_EXPONENT_BIAS
+        expon_x += add_expon + EXPONENT_BIAS
         
         if expon_x < 0 {
             if rounded_up {

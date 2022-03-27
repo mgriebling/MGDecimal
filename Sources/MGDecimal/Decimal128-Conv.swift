@@ -12,8 +12,8 @@ extension Decimal128 {
     /////////////////////////////////////////
     // BID128 definitions
     ////////////////////////////////////////
-    static let DECIMAL_MAX_EXPON_128     = 12287
-    static let DECIMAL_EXPONENT_BIAS_128 = 6176
+    static let MAX_EXPON                 = 12287
+    static let EXPONENT_BIAS             = 6176
     static let MAX_FORMAT_DIGITS_128     = 34
     static let MAX_STRING_DIGITS_128     = 100
     static let MAX_SEARCH                = MAX_STRING_DIGITS_128-MAX_FORMAT_DIGITS_128-1
@@ -62,7 +62,7 @@ extension Decimal128 {
                 return UInt32(res)
             }
             // x is 0
-            exponent_x -= DECIMAL_EXPONENT_BIAS_128 + Decimal32.EXPONENT_BIAS;
+            exponent_x -= EXPONENT_BIAS + Decimal32.EXPONENT_BIAS;
             if exponent_x < 0 {
                 exponent_x = 0
             }
@@ -97,10 +97,10 @@ extension Decimal128 {
             
             var uf_check = false
             var carry = UInt64(), CX1 = UInt128(), T128 = UInt128()
-            if (exponent_x < DECIMAL_EXPONENT_BIAS_128 - Decimal32.EXPONENT_BIAS) {
+            if (exponent_x < EXPONENT_BIAS - Decimal32.EXPONENT_BIAS) {
                 uf_check = true
-                if (-extra_digits + exponent_x - DECIMAL_EXPONENT_BIAS_128 + Decimal32.EXPONENT_BIAS + 35 >= 0) {
-                    if (exponent_x == DECIMAL_EXPONENT_BIAS_128 - Decimal32.EXPONENT_BIAS - 1) {
+                if (-extra_digits + exponent_x - EXPONENT_BIAS + Decimal32.EXPONENT_BIAS + 35 >= 0) {
+                    if (exponent_x == EXPONENT_BIAS - Decimal32.EXPONENT_BIAS - 1) {
                         T128 = bid_round_const_table_128[rmode1][extra_digits]
                         __add_carry_out (&CX1.lo, &carry, T128.lo, CX.lo);
                         CX1.hi = CX.hi + T128.hi + carry;
@@ -108,8 +108,8 @@ extension Decimal128 {
                             uf_check = false
                         }
                     }
-                    extra_digits +=  DECIMAL_EXPONENT_BIAS_128 - Decimal32.EXPONENT_BIAS - exponent_x;
-                    exponent_x = DECIMAL_EXPONENT_BIAS_128 - Decimal32.EXPONENT_BIAS;
+                    extra_digits +=  EXPONENT_BIAS - Decimal32.EXPONENT_BIAS - exponent_x;
+                    exponent_x = EXPONENT_BIAS - Decimal32.EXPONENT_BIAS;
                 } else {
                     rmode1 = roundboundIndex(BID_ROUNDING_TO_ZERO) >> 2
                 }
@@ -194,7 +194,7 @@ extension Decimal128 {
             }
         }
         
-        return Decimal32.get_BID32 (UInt32(sign_x >> 32), exponent_x - DECIMAL_EXPONENT_BIAS_128 +
+        return Decimal32.get_BID32 (UInt32(sign_x >> 32), exponent_x - EXPONENT_BIAS +
                                     Decimal32.EXPONENT_BIAS, UInt32(CX.lo), rmode, &pfpsf)
     }
     
@@ -390,15 +390,15 @@ extension Decimal128 {
             coeff.lo = 0x38c15b0a00000000
         }
         // check OF, UF
-        if expon < 0 || expon > DECIMAL_MAX_EXPON_128 {
+        if expon < 0 || expon > MAX_EXPON {
             // check UF
             if expon < 0 {
                 return handle_UF_128(sgn, expon, coeff, prounding_mode, &fpsc)
             }
             
-            if expon - MAX_FORMAT_DIGITS_128 <= DECIMAL_MAX_EXPON_128 {
+            if expon - MAX_FORMAT_DIGITS_128 <= MAX_EXPON {
                 let T = bid_power10_table_128[MAX_FORMAT_DIGITS_128 - 1];
-                while __unsigned_compare_gt_128(T, coeff) && expon > DECIMAL_MAX_EXPON_128 {
+                while __unsigned_compare_gt_128(T, coeff) && expon > MAX_EXPON {
                     coeff.hi = (coeff.hi << 3) + (coeff.hi << 1) + (coeff.lo >> 61) + (coeff.lo >> 63)
                     let tmp2 = coeff.lo << 3
                     coeff.lo = (coeff.lo << 1) + tmp2
@@ -408,9 +408,9 @@ extension Decimal128 {
                     expon-=1
                 }
             }
-            if expon > DECIMAL_MAX_EXPON_128 {
+            if expon > MAX_EXPON {
                 if (coeff.hi | coeff.lo) == 0 {
-                    pres.hi = sgn | (UInt64(DECIMAL_MAX_EXPON_128) << 49)
+                    pres.hi = sgn | (UInt64(MAX_EXPON) << 49)
                     pres.lo = 0
                     return pres
                 }
@@ -908,12 +908,12 @@ extension Decimal128 {
                 }
                 return res
             }
-            exponent_x = exponent_x - DECIMAL_EXPONENT_BIAS_128 + Decimal64.DECIMAL_EXPONENT_BIAS
+            exponent_x = exponent_x - EXPONENT_BIAS + Decimal64.EXPONENT_BIAS
             if exponent_x < 0 {
                 return sign_x
             }
-            if exponent_x > Decimal64.DECIMAL_MAX_EXPON_64 {
-                exponent_x = Decimal64.DECIMAL_MAX_EXPON_64
+            if exponent_x > Decimal64.MAX_EXPON {
+                exponent_x = Decimal64.MAX_EXPON
             }
             return sign_x | (UInt64(exponent_x) << 53)
         }
@@ -941,10 +941,10 @@ extension Decimal128 {
                 rmode = 3 - rmode
             }
             
-            if exponent_x < DECIMAL_EXPONENT_BIAS_128 - Decimal64.DECIMAL_EXPONENT_BIAS {
+            if exponent_x < EXPONENT_BIAS - Decimal64.EXPONENT_BIAS {
                 uf_check = true
-                if -extra_digits + exponent_x - DECIMAL_EXPONENT_BIAS_128 + Decimal64.DECIMAL_EXPONENT_BIAS + 35 >= 0 {
-                    if (exponent_x == DECIMAL_EXPONENT_BIAS_128 - Decimal64.DECIMAL_EXPONENT_BIAS - 1) {
+                if -extra_digits + exponent_x - EXPONENT_BIAS + Decimal64.EXPONENT_BIAS + 35 >= 0 {
+                    if (exponent_x == EXPONENT_BIAS - Decimal64.EXPONENT_BIAS - 1) {
                         T128 = bid_round_const_table_128[rmode][extra_digits];
                         __add_carry_out(&CX1.lo, &carry, T128.lo, CX.lo);
                         CX1.hi = CX.hi + T128.hi + carry;
@@ -952,8 +952,8 @@ extension Decimal128 {
                             uf_check = false
                         }
                     }
-                    extra_digits += DECIMAL_EXPONENT_BIAS_128 - Decimal64.DECIMAL_EXPONENT_BIAS - exponent_x
-                    exponent_x = DECIMAL_EXPONENT_BIAS_128 - Decimal64.DECIMAL_EXPONENT_BIAS;
+                    extra_digits += EXPONENT_BIAS - Decimal64.EXPONENT_BIAS - exponent_x
+                    exponent_x = EXPONENT_BIAS - Decimal64.EXPONENT_BIAS;
                     //uf_check = 2;
                 } else {
                     rmode = roundboundIndex(BID_ROUNDING_TO_ZERO) >> 2
@@ -1036,7 +1036,7 @@ extension Decimal128 {
                 pfpsf.formUnion(status)
             }
         }
-        return Decimal64.get_BID64 (sign_x, exponent_x - DECIMAL_EXPONENT_BIAS_128 + Decimal64.DECIMAL_EXPONENT_BIAS,
+        return Decimal64.get_BID64 (sign_x, exponent_x - EXPONENT_BIAS + Decimal64.EXPONENT_BIAS,
                                     CX.lo, rnd_mode, &pfpsf);
     }
     

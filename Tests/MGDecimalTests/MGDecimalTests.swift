@@ -105,8 +105,8 @@ final class MGDecimalTests: XCTestCase {
     
     func testUInt128() throws {
         let y : UInt128 = "0xA207_8000_0000_0000_0000_0000_0000_03D0"
-        let x : UInt128 = "1_000_000_000_000_000_000_000_000_000_000"
-        XCTAssert(x.description == "1000000000000000000000000000000")
+        let x : UInt128 = "1_000_000_000_000_000_000_000_000_000_000_000"
+        XCTAssert(x.description == "1000000000000000000000000000000000")
         XCTAssert(y.description == "215373877543595382617630722487884973008")
         print(x, y)
     }

@@ -107,7 +107,7 @@ extension Decimal128 {
             }
             
             // print E and sign of exponent
-            let exp = Int(x_exp >> 49) - DECIMAL_EXPONENT_BIAS_128 + (str.count - 1)
+            let exp = Int(x_exp >> 49) - EXPONENT_BIAS + (str.count - 1)
             str = addDecimalPointAndExponent(str, exp, MAX_FORMAT_DIGITS_128)
         }
         return sign + str
@@ -233,7 +233,7 @@ extension Decimal128 {
                         return res
                     }
                 } else if !ps.isEmpty {
-                    if right_radix_leading_zeros > DECIMAL_EXPONENT_BIAS_128 { right_radix_leading_zeros = DECIMAL_EXPONENT_BIAS_128 }
+                    if right_radix_leading_zeros > EXPONENT_BIAS { right_radix_leading_zeros = EXPONENT_BIAS }
                     res.hi = UInt64(0x3040000000000000 - (right_radix_leading_zeros << 49)) | sign_x
                     res.lo = 0
                     return res
@@ -351,7 +351,7 @@ extension Decimal128 {
         var coeff_high, coeff_low: UInt64
         let dbuffer = buffer.map { UInt64($0.wholeNumberValue ?? 0) } // convert character to uints
         if ndigits_total <= MAX_FORMAT_DIGITS_128 {
-            dec_expon += DECIMAL_EXPONENT_BIAS_128 - ndigits_after - right_radix_leading_zeros
+            dec_expon += EXPONENT_BIAS - ndigits_after - right_radix_leading_zeros
             if dec_expon < 0 {
                 res.hi = 0 | sign_x
                 res.lo = 0
@@ -393,7 +393,7 @@ extension Decimal128 {
             return bid_get_BID128(sign_x, dec_expon, CX, rnd_mode, &pfpsf)
         } else {
             // simply round using the digits that were read
-            dec_expon += ndigits_before + DECIMAL_EXPONENT_BIAS_128 - MAX_FORMAT_DIGITS_128 - right_radix_leading_zeros
+            dec_expon += ndigits_before + EXPONENT_BIAS - MAX_FORMAT_DIGITS_128 - right_radix_leading_zeros
             
             if dec_expon < 0 {
                 res.hi = 0 | sign_x

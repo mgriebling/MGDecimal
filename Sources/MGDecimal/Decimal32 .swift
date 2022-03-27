@@ -150,6 +150,10 @@ extension Decimal32 : AdditiveArithmetic, Comparable, SignedNumeric, Strideable,
     public static func == (lhs: Decimal32, rhs: Decimal32) -> Bool { Decimal32.equal(lhs.x, rhs.x, &Decimal32.state) }
     public static func < (lhs: Decimal32, rhs: Decimal32) -> Bool { Decimal32.lessThan(lhs.x, rhs.x, &Decimal32.state) }
     
+    public static func + (lhs: Decimal32, rhs: Decimal32) -> Decimal32 {
+        Decimal32(raw: Decimal32.add(lhs.x, rhs.x, Decimal32.rounding, &Decimal32.state))
+    }
+    
     public static func / (lhs: Decimal32, rhs: Decimal32) -> Decimal32 {
         Decimal32(raw: Decimal32.div(lhs.x, rhs.x, Decimal32.rounding, &Decimal32.state))
     }
@@ -162,10 +166,6 @@ extension Decimal32 : AdditiveArithmetic, Comparable, SignedNumeric, Strideable,
     public static func *= (lhs: inout Decimal32, rhs: Decimal32) { lhs = lhs * rhs }
     public static prefix func - (lhs: Decimal32) -> Decimal32 { Decimal32(raw: lhs.x ^ Decimal32.SIGN_MASK32) }
     public static func - (lhs: Decimal32, rhs: Decimal32) -> Decimal32 { lhs + (-rhs) }
-    
-    public static func + (lhs: Decimal32, rhs: Decimal32) -> Decimal32 {
-        Decimal32(raw: Decimal32.add(lhs.x, rhs.x, Decimal32.rounding, &Decimal32.state))
-    }
     
 }
 

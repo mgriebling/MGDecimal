@@ -38,8 +38,8 @@ extension Decimal64 {
     ////////////////////////////////////////
     // BID64 definitions
     ////////////////////////////////////////
-    static let DECIMAL_MAX_EXPON_64  =   767
-    static let DECIMAL_EXPONENT_BIAS =   398
+    static let MAX_EXPON             =   767
+    static let EXPONENT_BIAS         =   398
     static let MAX_DIGITS            =    16
     static let expmin                = -6176 // min unbiased exponent
     static let expmax                =  6111 // max unbiased exponent
@@ -47,7 +47,7 @@ extension Decimal64 {
     static let expmax16              =   369 // max unbiased exponent
     static let expmin7               =  -101 // min unbiased exponent
     static let expmax7               =    90 // max unbiased exponent
-    static let BID64_SIG_MAX         = 9_999_999_999_999_999
+    static let MAX_NUMBER            = 9_999_999_999_999_999
     
     ////////////////////////////////////////
     // Constant Definitions
@@ -146,7 +146,7 @@ extension Decimal64 {
         }
         
         return very_fast_get_BID64_small_mantissa(UInt64(sign_x) << 32,
-                                                  exponent_x + DECIMAL_EXPONENT_BIAS - Decimal32.EXPONENT_BIAS,
+                                                  exponent_x + EXPONENT_BIAS - Decimal32.EXPONENT_BIAS,
                                                   UInt64(coefficient_x))
     }    // convert_bid32_to_bid64
     
@@ -171,7 +171,7 @@ extension Decimal64 {
                 return false    // NaN or Infinity
             }
             // check for non-canonical values
-            if coeff > BID64_SIG_MAX {
+            if coeff > MAX_NUMBER {
                 coeff = 0
             }
             pcoefficient_x = coeff
@@ -210,7 +210,7 @@ extension Decimal64 {
                 }
                 return res
             }
-            exponent_x = exponent_x - DECIMAL_EXPONENT_BIAS + Decimal32.EXPONENT_BIAS
+            exponent_x = exponent_x - EXPONENT_BIAS + Decimal32.EXPONENT_BIAS
             if exponent_x < 0 {
                 exponent_x = 0
             }
@@ -220,7 +220,7 @@ extension Decimal64 {
             return UInt32(sign_x >> 32) | UInt32(exponent_x << 23)
         }
         
-        exponent_x = exponent_x - DECIMAL_EXPONENT_BIAS + Decimal32.EXPONENT_BIAS
+        exponent_x = exponent_x - EXPONENT_BIAS + Decimal32.EXPONENT_BIAS
         
         // check number of digits
         if coefficient_x > Decimal32.MAX_NUMBER {
@@ -404,12 +404,12 @@ extension Decimal64 {
                 
                 return sgn | _C64;
             }
-            if coeff == 0 { if expon > DECIMAL_MAX_EXPON_64 { expon = DECIMAL_MAX_EXPON_64 } }
+            if coeff == 0 { if expon > MAX_EXPON { expon = MAX_EXPON } }
             while (coeff < 1000000000000000 && expon >= 3 * 256) {
                 expon-=1
                 coeff = (coeff << 3) + (coeff << 1);
             }
-            if expon > DECIMAL_MAX_EXPON_64 {
+            if expon > MAX_EXPON {
                 fpsc.formUnion([.underflow, .inexact])
 
                 // overflow
@@ -585,7 +585,7 @@ extension Decimal64 {
                     expon-=1
                     coeff = (coeff << 3) + (coeff << 1);
                 }
-                if expon > DECIMAL_MAX_EXPON_64 {
+                if expon > MAX_EXPON {
                     fpsc.formUnion([.overflow, .inexact])
                     
                     // overflow
@@ -760,7 +760,7 @@ extension Decimal64 {
         
         // if the integer is negative, use the absolute value
         C = x.magnitude
-        if C <= BID64_SIG_MAX {    // |C| <= 10^16-1 and the result is exact
+        if C <= MAX_NUMBER {    // |C| <= 10^16-1 and the result is exact
             if C < 0x0020000000000000 {    // C < 2^53
                 res = x_sign | 0x31c0000000000000 | C
             } else {    // C >= 2^53
@@ -852,7 +852,7 @@ extension Decimal64 {
         new_coeff.lo = coefficient_x
         new_coeff.hi = 0
         return Decimal128.bid_get_BID128_very_fast(sign_x,
-                                                   exponent_x + Decimal128.DECIMAL_EXPONENT_BIAS_128 - DECIMAL_EXPONENT_BIAS, new_coeff)
+                                                   exponent_x + Decimal128.EXPONENT_BIAS - EXPONENT_BIAS, new_coeff)
     }    // convert_bid64_to_bid128
     
     

@@ -101,7 +101,7 @@ public struct UInt128 : Equatable, Comparable, Codable, CustomStringConvertible,
                 carry = res[j] >> 4; res[j] &= 0xF
             }
         }
-        return Array(res.drop { $0 == 0 } )
+        return Array(res.drop { $0 == 0 } )  // drop leading zeros
     }
     
     /// CustomStringConvertible compliance
@@ -123,10 +123,7 @@ extension UInt128 : FixedWidthInteger {
         else if source.exponent < 0 || source.rounded() != source { return nil }
         else { self = UInt128(UInt64(source)) }
     }
-    public init<T>(_ source: T) where T : BinaryInteger {
-        self.init(UInt(source))
-    }
-    
+    public init<T>(_ source: T) where T : BinaryInteger { self.init(UInt(source)) }
     public init<T:BinaryFloatingPoint>(_ source: T) { self.init(UInt64(source)) }
     public init(bigEndian value: UInt128) { self = value.bigEndian }
     public init(littleEndian value: UInt128) { self = value.littleEndian }
@@ -154,27 +151,38 @@ extension UInt128 : BinaryInteger {
     public static var min: UInt128 { UInt128(0) }
     
     public func addingReportingOverflow(_ rhs: UInt128) -> (partialValue: UInt128, overflow: Bool) {
-        (0, false)
+        var res: UInt128 = 0, c = UInt64(), s = UInt64()
+        __add_128_128(&res, self, rhs)
+        __add_carry_out(&s, &c, self.hi, rhs.hi)
+        return (res, c != 0)
     }
     
     public func subtractingReportingOverflow(_ rhs: UInt128) -> (partialValue: UInt128, overflow: Bool) {
-        (0, false)
+        var res: UInt128 = 0, c = UInt64(), s = UInt64()
+        __sub_128_128(&res, self, rhs)
+        __sub_borrow_out(&s, &c, self.hi, rhs.hi)
+        return (res, c != 0)
     }
     
     public func multipliedReportingOverflow(by rhs: UInt128) -> (partialValue: UInt128, overflow: Bool) {
-        (0, false)
+        var ph = UInt128(), pl = UInt128()
+        __mul_128x128_full(&ph, &pl, self, rhs)
+        return (pl, ph != 0)
     }
     
     public func dividedReportingOverflow(by rhs: UInt128) -> (partialValue: UInt128, overflow: Bool) {
-        (0, false)
+        assert(false, "\(#function) not implemented")
+        return (0, false)
     }
     
     public func remainderReportingOverflow(dividingBy rhs: UInt128) -> (partialValue: UInt128, overflow: Bool) {
-        (0, false)
+        assert(false, "\(#function) not implemented")
+        return (0, false)
     }
     
     public func dividingFullWidth(_ dividend: (high: UInt128, low: UInt128)) -> (quotient: UInt128, remainder: UInt128) {
-        (0, 0) /* TBD */
+        assert(false, "\(#function) not implemented")
+        return (0, 0) /* TBD */
     }
 
     public typealias Words = [UInt]
@@ -187,51 +195,54 @@ extension UInt128 : BinaryInteger {
     public var nonzeroBitCount: Int { hi.nonzeroBitCount + lo.nonzeroBitCount }
     public var trailingZeroBitCount: Int { lo.trailingZeroBitCount }
     public var bitWidth: Int { lo.bitWidth * 2 }
-    
-    public static func / (lhs: UInt128, rhs: UInt128) -> UInt128 {
-        lhs
-    }
-    
-    public static func /= (lhs: inout UInt128, rhs: UInt128) {
-
-    }
-    
-    public static func % (lhs: UInt128, rhs: UInt128) -> UInt128 {
-        lhs
-    }
-    
-    public static func %= (lhs: inout UInt128, rhs: UInt128) {
-    
-    }
-    
-    public static func & (lhs: UInt128, rhs: UInt128) -> UInt128 { UInt128(upper:lhs.hi & rhs.hi, lower:lhs.lo & rhs.lo) }
-    public static func &= (lhs: inout UInt128, rhs: UInt128) { lhs = lhs & rhs }
-    public static func | (lhs: UInt128, rhs: UInt128) -> UInt128 { UInt128(upper:lhs.hi | rhs.hi, lower:lhs.lo | rhs.lo) }
-    public static func |= (lhs: inout UInt128, rhs: UInt128) { lhs = lhs | rhs }
-    public static func ^ (lhs: UInt128, rhs: UInt128) -> UInt128 { UInt128(upper:lhs.hi ^ rhs.hi, lower:lhs.lo ^ rhs.lo) }
-    public static func ^= (lhs: inout UInt128, rhs: UInt128) { lhs = lhs ^ rhs }
-    public static func << <RHS:BinaryInteger>(lhs: UInt128, rhs: RHS) -> UInt128 { sll128(lhs.hi, lhs.lo, Int(rhs)) }
-    public static func <<= <RHS:BinaryInteger>(lhs: inout UInt128, rhs: RHS) { lhs = lhs << rhs }
-    public static func >> <RHS:BinaryInteger>(lhs: UInt128, rhs: RHS) -> UInt128 { srl128(lhs.hi, lhs.lo, Int(rhs)) }
-    public static func >>= <RHS:BinaryInteger>(lhs: inout UInt128, rhs: RHS) { lhs = lhs >> rhs }
-    
     public var magnitude: UInt128 { self }
     
-    public static func * (lhs: UInt128, rhs: UInt128) -> UInt128 {
-        lhs
-    }
-    
-    public static func *= (lhs: inout UInt128, rhs: UInt128) {
-        
-    }
-    
     public static func - (lhs: UInt128, rhs: UInt128) -> UInt128 {
-        lhs
+        let res = lhs.subtractingReportingOverflow(rhs)
+        assert(!res.overflow, "UInt128: subtraction overflow!")
+        return res.partialValue
     }
     
     public static func + (lhs: UInt128, rhs: UInt128) -> UInt128 {
-        lhs
+        let res = lhs.addingReportingOverflow(rhs)
+        assert(!res.overflow, "UInt128: addition overflow!")
+        return res.partialValue
     }
-   
     
+    public static func * (lhs: UInt128, rhs: UInt128) -> UInt128 {
+        let res = lhs.multipliedReportingOverflow(by: rhs)
+        assert(!res.overflow, "UInt128: multiplication overflow!")
+        return res.partialValue
+    }
+    
+    public static func / (lhs: UInt128, rhs: UInt128) -> UInt128 {
+        assert(rhs != 0, "UInt128: division by zero")
+        guard lhs >= rhs else { return 0 } // underflow
+        if lhs == rhs { return 1 }
+        if lhs == 0 { return 0 }
+        let res = lhs.dividedReportingOverflow(by: rhs)
+        assert(!res.overflow, "UInt128: division overflow!")
+        return res.partialValue
+    }
+    
+    public static func % (lhs: UInt128, rhs: UInt128) -> UInt128 {
+        assert(false, "\(#function) not implemented")
+        return lhs /* TBD */
+    }
+    
+    public static func & (lhs: UInt128, rhs: UInt128) -> UInt128 { UInt128(upper:lhs.hi & rhs.hi, lower:lhs.lo & rhs.lo) }
+    public static func | (lhs: UInt128, rhs: UInt128) -> UInt128 { UInt128(upper:lhs.hi | rhs.hi, lower:lhs.lo | rhs.lo) }
+    public static func ^ (lhs: UInt128, rhs: UInt128) -> UInt128 { UInt128(upper:lhs.hi ^ rhs.hi, lower:lhs.lo ^ rhs.lo) }
+    public static func << <RHS:BinaryInteger>(lhs: UInt128, rhs: RHS) -> UInt128 { sll128(lhs.hi, lhs.lo, Int(rhs)) }
+    public static func >> <RHS:BinaryInteger>(lhs: UInt128, rhs: RHS) -> UInt128 { srl128(lhs.hi, lhs.lo, Int(rhs)) }
+    
+    public static func *= (lhs: inout UInt128, rhs: UInt128) { lhs = lhs * rhs }
+    public static func %= (lhs: inout UInt128, rhs: UInt128) { lhs = lhs % rhs }
+    public static func /= (lhs: inout UInt128, rhs: UInt128) { lhs = lhs / rhs }
+    public static func &= (lhs: inout UInt128, rhs: UInt128) { lhs = lhs & rhs }
+    public static func |= (lhs: inout UInt128, rhs: UInt128) { lhs = lhs | rhs }
+    public static func ^= (lhs: inout UInt128, rhs: UInt128) { lhs = lhs ^ rhs }
+    public static func <<= <RHS:BinaryInteger>(lhs: inout UInt128, rhs: RHS) { lhs = lhs << rhs }
+    public static func >>= <RHS:BinaryInteger>(lhs: inout UInt128, rhs: RHS) { lhs = lhs >> rhs }
+  
 }

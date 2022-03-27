@@ -22,6 +22,20 @@ public struct Decimal64 : ExpressibleByStringLiteral, ExpressibleByFloatLiteral,
     public static private(set) var rounding = Rounding.toNearestOrEven
     
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // MARK: - Class State constants
+    public static let zero = Decimal64(raw: return_bid64_zero(0))
+    public static let radix = 10
+    public static let pi = Decimal64(stringLiteral: "3.1415926535897932384626433832795028841971693993751")
+    public static let nan = Decimal64(raw: return_bid64_nan(0, 0, 0))
+    public static let quietNaN = Decimal64(raw: return_bid64_nan(0, 0, 0))
+    public static let signalingNaN = Decimal64(raw: SNAN_MASK64)
+    public static let infinity = Decimal64(raw: return_bid64_inf(0))
+    
+    public static var greatestFiniteMagnitude: Decimal64 { Decimal64(raw: return_bid64_max(0)) }
+    public static var leastNormalMagnitude: Decimal64    { Decimal64(raw: return_bid64(0, 0, 1_000_000_000_000_000)) }
+    public static var leastNonzeroMagnitude: Decimal64   { Decimal64(raw: return_bid64(0, 0, 1)) }
+    
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // MARK: - Initializers
     init(raw: UInt64) { x = raw } // only for internal use
     
@@ -96,7 +110,7 @@ public extension Decimal64 {
     private var _isZero: Bool {
         if (x & Decimal64.INFINITY_MASK64) == Decimal64.INFINITY_MASK64 { return false }
         if (Decimal64.MASK_STEERING_BITS & x) == Decimal64.MASK_STEERING_BITS {
-            return (x & Decimal64.MASK_BINARY_SIG2) | Decimal64.MASK_BINARY_OR2 > Decimal64.BID64_SIG_MAX
+            return (x & Decimal64.MASK_BINARY_SIG2) | Decimal64.MASK_BINARY_OR2 > Decimal64.MAX_NUMBER
         } else {
             return (x & Decimal64.MASK_BINARY_SIG1) == 0
         }
@@ -114,7 +128,7 @@ public extension Decimal64 {
         } else if (x & Decimal64.MASK_INF) == Decimal64.MASK_INF {
             return (x & 0x03ffffff) == 0
         } else if (x & Decimal64.MASK_STEERING_BITS) == Decimal64.MASK_STEERING_BITS { // 24-bit
-            return ((x & Decimal64.MASK_BINARY_SIG2) | Decimal64.MASK_BINARY_OR2) <= Decimal64.BID64_SIG_MAX
+            return ((x & Decimal64.MASK_BINARY_SIG2) | Decimal64.MASK_BINARY_OR2) <= Decimal64.MAX_NUMBER
         } else { // 23-bit coeff.
             return true
         }
@@ -127,7 +141,7 @@ public extension Decimal64 {
         if (x & MASK_STEERING_BITS) == MASK_STEERING_BITS {
             sig_x = (x & MASK_BINARY_SIG2) | MASK_BINARY_OR2
             // check for zero or non-canonical
-            if sig_x > Decimal64.BID64_SIG_MAX || sig_x == 0 { return nil } // zero or non-canonical
+            if sig_x > Decimal64.MAX_NUMBER || sig_x == 0 { return nil } // zero or non-canonical
             exp_x = Int((x & MASK_BINARY_EXPONENT2) >> 21)
         } else {
             sig_x = (x & MASK_BINARY_SIG1)

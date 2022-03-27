@@ -1125,7 +1125,7 @@ extension Decimal32 {
         new_coeff.lo = UInt64(coefficient_x)
         new_coeff.hi = 0
         return Decimal128.bid_get_BID128_very_fast(UInt64(sign_x) << 32,
-                                exponent_x + Decimal128.DECIMAL_EXPONENT_BIAS_128 - EXPONENT_BIAS, new_coeff)
+                                exponent_x + Decimal128.EXPONENT_BIAS - EXPONENT_BIAS, new_coeff)
     }    // convert_bid32_to_bid128
     
     /*
@@ -1147,7 +1147,7 @@ extension Decimal32 {
             }
         }
         return Decimal64.very_fast_get_BID64_small_mantissa(UInt64(sign_x) << 32,
-                                            exponent_x + Decimal64.DECIMAL_EXPONENT_BIAS - EXPONENT_BIAS,
+                                            exponent_x + Decimal64.EXPONENT_BIAS - EXPONENT_BIAS,
                                             UInt64(coefficient_x))
     }    // convert_bid32_to_bid64
     

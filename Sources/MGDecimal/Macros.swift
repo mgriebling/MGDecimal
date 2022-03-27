@@ -243,17 +243,31 @@ func unpack_binary64(_ x:Double, _ s: inout Int, _ e: inout Int, _ c: inout UInt
     return nil
 }
 
-@inlinable func return_bid32_max(_ s:Int) -> UInt32 { return_bid32(s,191,9_999_999) }
-@inlinable func return_bid32_zero(_ s:Int) -> UInt32 { return_bid32(s,101,0) }
-@inlinable func return_bid32_inf(_ s:Int) -> UInt32 { return_bid32(s,(0xF<<4),0) }
+func return_bid32_max(_ s:Int) -> UInt32 { return_bid32(s,Decimal32.MAX_EXPON,Decimal32.MAX_NUMBER) }
+func return_bid32_zero(_ s:Int) -> UInt32 { return_bid32(s,Decimal32.EXPONENT_BIAS,0) }
+@inlinable func return_bid32_inf(_ s:Int) -> UInt32 { return_bid32(s,0xF<<4,0) }
 @inlinable func return_bid32_nan(_ s:Int, _ c_hi:UInt64, _ c_lo:UInt64) -> UInt32 {
     return_bid32(s, 0x1F<<3, c_hi>>44 > 999_999 ? 0 : Int(c_hi>>44))
 }
 
-@inlinable func return_bid64_zero(_ s:Int) -> UInt64 { return_bid64(s,398,0) }
-@inlinable func return_bid64_inf(_ s:Int) -> UInt64 { return_bid64(s,(0xF<<6),0) }
+func return_bid64_max(_ s:Int) -> UInt64 { return_bid64(s,Decimal64.MAX_EXPON,Decimal64.MAX_NUMBER) }
+func return_bid64_zero(_ s:Int) -> UInt64 { return_bid64(s,Decimal64.EXPONENT_BIAS,0) }
+@inlinable func return_bid64_inf(_ s:Int) -> UInt64 { return_bid64(s,0xF<<6,0) }
 @inlinable func return_bid64_nan(_ s:Int, _ c_hi:UInt64, _ c_lo:UInt64) -> UInt64 {
-  return_bid64(s, 0x1F<<5, (((c_hi>>14) > 999999999999999) ? 0 : Int(c_hi>>14)))
+  return_bid64(s, 0x1F<<5, (((c_hi>>14) > 999_999_999_999_999) ? 0 : Int(c_hi>>14)))
+}
+
+func return_bid128_max(_ s:Int) -> UInt128 {
+    return_bid128(s,Decimal128.MAX_EXPON,542101086242752,4003012203950112767)
+}
+func return_bid128_zero(_ s:Int) -> UInt128 { return_bid128(s,Decimal128.EXPONENT_BIAS,0,0) }
+func return_bid128_inf(_ s:Int) -> UInt128 { return_bid128(s,0xF<<10,0,0) }
+func return_bid128_nan(_ s:Int, _ c_hi:UInt64, _ c_lo:UInt64) -> UInt128 {
+    if lt128(54210108624275,4089650035136921599, (c_hi>>18),((c_lo>>18)+(c_hi<<46))) {
+        return return_bid128(s,0x1F<<9,0,0)
+    } else {
+        return return_bid128(s,0x1F<<9,c_hi>>18,(c_lo>>18)+(c_hi<<46))
+    }
 }
 
 @inlinable func return_double_max(_ s:Int) -> Double { return_double(s,2046,(1<<52)-1) }
@@ -618,15 +632,6 @@ func __scale128_x10(_ _TMP:UInt128) -> UInt128 {
     return _TMP2
 }
 
-func __scale128_div10(_ _TMP:UInt128) -> UInt128 {
-    var _TMP2=UInt128(), _TMP8=UInt128()
-    __add_128_128(&_TMP2, _TMP2, _TMP8)
-    _TMP2 = srl128(_TMP.hi, _TMP.lo, 1)
-    _TMP8 = srl128(_TMP.hi, _TMP.lo, 3)
-    __add_128_128(&_TMP2, _TMP2, _TMP8)
-    return _TMP2
-}
-
 func bid___div_128_by_128 (_ pCQ: inout UInt128, _ pCR: inout UInt128, _ CX0:UInt128, _ CY:UInt128) {
     if CX0.hi == 0 && CY.hi == 0 {
         pCQ.lo = CX0.lo / CY.lo
@@ -775,15 +780,19 @@ func __add_128_128(_ R128:inout UInt128, _ A128:UInt128, _ B128:UInt128) {
 }
 
 @inlinable func __add_carry_out(_ S: inout UInt64, _ CY: inout UInt64, _ X:UInt64, _ Y:UInt64) {
-    let X1=X
-    S = X &+ Y
-    CY = S<X1 ? 1 : 0
+    S = X &+ Y  // allow overflow
+    CY = S < X ? 1 : 0
+}
+
+@inlinable func __sub_borrow_out(_ S: inout UInt64, _ CY: inout UInt64, _ X:UInt64, _ Y:UInt64) {
+    S = X &- Y  // allow underflow
+    CY = S > X ? 1 : 0
 }
 
 @inlinable func __add_carry_in_out(_ S: inout UInt64, _ CY: inout UInt64, _ X:UInt64, _ Y:UInt64, _ CI: UInt64) {
-    let X1 = X + CI;
-    S = X1 &+ Y;
-    CY = ((S<X1) || (X1<CI)) ? 1 : 0;
+    let X1 = X + CI
+    S = X1 &+ Y
+    CY = ((S<X1) || (X1<CI)) ? 1 : 0
 }
 
 // 64x64-bit product

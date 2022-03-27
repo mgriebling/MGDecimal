@@ -16,6 +16,20 @@ public struct Decimal128 : ExpressibleByStringLiteral, ExpressibleByFloatLiteral
     public static private(set) var state = Status.clearFlags
     public static private(set) var rounding = Rounding.toNearestOrEven
     
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // MARK: - Class State constants
+    public static let zero = Decimal128(raw: return_bid128_zero(0))
+    public static let radix = 10
+    public static let pi = Decimal128(stringLiteral: "3.1415926535897932384626433832795028841971693993751")
+    public static let nan = Decimal128(raw: return_bid128_nan(0, 0, 0))
+    public static let quietNaN = Decimal128(raw: return_bid128_nan(0, 0, 0))
+    // public static let signalingNaN = Decimal128(raw: SNAN_MASK64)
+    public static let infinity = Decimal128(raw: return_bid128_inf(0))
+    
+    public static var greatestFiniteMagnitude: Decimal128 { Decimal128(raw: return_bid128_max(0)) }
+    public static var leastNormalMagnitude: Decimal128    { Decimal128(raw: return_bid128(0, 0, 54210108624275, 4089650035136921600)) }
+    public static var leastNonzeroMagnitude: Decimal128   { Decimal128(raw: return_bid128(0, 0, 0, 1)) }
+    
     init(raw: UInt128) { x = raw } // Note: internal use only
     
     /// Binary Integer Decimal encoded 64-bit number
@@ -59,14 +73,6 @@ extension Decimal128 {
     
 }
 
-/// special constants
-///
-extension Decimal128 {
-   
-    public static let radix = 10
-
-}
-
 extension Decimal128 /* : SignedNumeric */ {
 
 //    public init?<T>(exactly source: T) where T : BinaryInteger { self.init(Int64(source)) }
@@ -74,26 +80,24 @@ extension Decimal128 /* : SignedNumeric */ {
 //    public var magnitude: MGDecimal128 { MGDecimal128(sign: .plus, exponent: exponent, mantissa: _significand) }
     
     public static func * (lhs: Decimal128, rhs: Decimal128) -> Decimal128 {
-        assertionFailure("Unimplemented '*' function")
+        assertionFailure("Unimplemented \(#function) function")
         return lhs
     }
     
-    public static func *= (result: inout Decimal128, arg: Decimal128) {
-        assertionFailure("Unimplemented '*=' function")
-    }
+    public static func *= (lhs: inout Decimal128, rhs: Decimal128) { lhs = lhs * rhs }
 
 }
 
 extension Decimal128 /* : FloatingPoint */ {
 
-    public static func / (lhs: Decimal128, rhs: Decimal128) -> Decimal128 { lhs /* TBD */ }
-    public static func /= (lhs: inout Decimal128, rhs: Decimal128) { /* TBD */ }
+    public static func / (lhs: Decimal128, rhs: Decimal128) -> Decimal128 { assertionFailure("Unimplemented \(#function) function"); return lhs }
+    public static func /= (lhs: inout Decimal128, rhs: Decimal128) { lhs = lhs / rhs }
     
-    public mutating func round(_ rule: FloatingPointRoundingRule) { /* TBD */ }
-    public mutating func formRemainder(dividingBy other: Decimal128) { /* TBD */ }
-    public mutating func formTruncatingRemainder(dividingBy other: Decimal128) { /* TBD */ }
-    public mutating func formSquareRoot() { /* TBD */ }
-    public mutating func addProduct(_ lhs: Decimal128, _ rhs: Decimal128) { /* TBD */ }
+    public mutating func round(_ rule: FloatingPointRoundingRule) { assertionFailure("Unimplemented \(#function) function") }
+    public mutating func formRemainder(dividingBy other: Decimal128) { assertionFailure("Unimplemented \(#function) function") }
+    public mutating func formTruncatingRemainder(dividingBy other: Decimal128) { assertionFailure("Unimplemented \(#function) function") }
+    public mutating func formSquareRoot() { assertionFailure("Unimplemented \(#function) function") }
+    public mutating func addProduct(_ lhs: Decimal128, _ rhs: Decimal128) { assertionFailure("Unimplemented \(#function) function") }
     
 }
 
