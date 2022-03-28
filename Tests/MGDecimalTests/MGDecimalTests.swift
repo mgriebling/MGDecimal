@@ -88,6 +88,13 @@ final class MGDecimalTests: XCTestCase {
         let y1 = Decimal64(stringLiteral: s); XCTAssert(y1.description == "1.234567890123457e+17")
         print("\(s) -> \(y1)")
         
+        print("Decimal64.zero =", Decimal64.zero); XCTAssert(Decimal64.zero.description == "0")
+        print("Decimal64.pi =", Decimal64.pi); XCTAssert(Decimal64.pi.description == "3.141592653589793")
+        print("Decimal64.nan =", Decimal64.nan); XCTAssert(Decimal64.nan.description == "NaN")
+        print("Decimal64.quietNaN =", Decimal64.quietNaN); XCTAssert(Decimal64.quietNaN.description == "NaN")
+        print("Decimal64.signalingNaN =", Decimal64.signalingNaN); XCTAssert(Decimal64.signalingNaN.description == "SNaN")
+        print("Decimal64.infinity =", Decimal64.infinity); XCTAssert(Decimal64.infinity.description == "Inf")
+        
         let n = UInt64(0xA2300000000003D0)
         let a = Decimal64(dpd64: n); XCTAssert(a.description == "-7.50")
         print(a, a.dpd64 == n ? "a = n" : "a != n"); XCTAssert(a.dpd64 == n)
@@ -98,6 +105,13 @@ final class MGDecimalTests: XCTestCase {
         let y1 = Decimal128(stringLiteral: s); XCTAssert(y1.description == "12345678901234567890.12345678901235")
         print("\(s) -> \(y1)")
         
+        print("Decimal128.zero =", Decimal128.zero); XCTAssert(Decimal128.zero.description == "0")
+        print("Decimal128.pi =", Decimal128.pi); XCTAssert(Decimal128.pi.description == "3.141592653589793238462651973214093")
+        print("Decimal128.nan =", Decimal128.nan); XCTAssert(Decimal128.nan.description == "NaN")
+        print("Decimal128.quietNaN =", Decimal128.quietNaN); XCTAssert(Decimal128.quietNaN.description == "NaN")
+        print("Decimal128.signalingNaN =", Decimal128.signalingNaN); XCTAssert(Decimal128.signalingNaN.description == "SNaN")
+        print("Decimal128.infinity =", Decimal128.infinity); XCTAssert(Decimal128.infinity.description == "Inf")
+        
         let n = UInt128(upper: 0xA207_8000_0000_0000, lower: 0x0000_0000_0000_03D0)
         let a = Decimal128(dpd128: n); XCTAssert(a.description == "-7.50")
         print(a, a.dpd128, a.dpd128 == n ? "a = n" : "a != n"); XCTAssert(a.dpd128 == n)
@@ -106,9 +120,17 @@ final class MGDecimalTests: XCTestCase {
     func testUInt128() throws {
         let y : UInt128 = "0xA207_8000_0000_0000_0000_0000_0000_03D0"
         let x : UInt128 = "1_000_000_000_000_000_000_000_000_000_000_000"
+        let div : UInt128 = 215373
+        let rem : UInt128 = "877_543_595_382_617_630_722_487_884_973_008"
         XCTAssert(x.description == "1000000000000000000000000000000000")
         XCTAssert(y.description == "215373877543595382617630722487884973008")
-        print(x, y)
+        XCTAssert(UInt128.max.description == "340282366920938463463374607431768211455")
+        XCTAssert(UInt128.min.description == "0")
+        print("x = \(x)", "y = \(y)")
+        print("UInt128.max = \(UInt128.max)", "UInt128.min = \(UInt128.min)")
+        XCTAssert((y/x).description == div.description)
+        XCTAssert((y%x).description == rem.description)
+        print("y/x = \(y/x), y%x = \(y%x)")
     }
     
 }

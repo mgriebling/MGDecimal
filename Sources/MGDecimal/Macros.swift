@@ -306,7 +306,7 @@ func return_bid128(_ s:Int, _ e:Int, _ c_hi:UInt64, _ c_lo:UInt64) -> UInt128 {
 }
 
 @inlinable func return_bid64(_ s:Int, _ e:Int, _ c:Int) -> UInt64 {
-    if UInt64(c) < (1<<53) {
+    if UInt64(c) < (UInt64(1)<<53) {
         return (UInt64(s) << 63) + (UInt64(e) << 53) + UInt64(c)
     } else {
         return (UInt64(s) << 63) + UInt64((0x3<<61) - (1<<53)) + (UInt64(e) << 51) + UInt64(c)
@@ -812,4 +812,105 @@ func __mul_64x64_to_128MACH(_ P128: inout UInt128, _ CX:UInt64, _ CY:UInt64)  {
 //  PM = (BID_UINT64)((BID_UINT32)PM)+PM2+(PL>>32);
 //  (P128).hi = PH + (PM>>32);
 //  (P128).lo = (PM<<32)+(BID_UINT32)PL;
+}
+
+/// Following is shamelessly borrowed from:
+/*
+    Copyright 2020 Chip Jarred
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+*/
+
+/*
+ The operators in this file implement the tuple operations for the 2-digit
+ arithmetic needed for Knuth's Algorithm D, and *only* those operations.
+ There is no attempt to be a complete set. They are meant to make the code that
+ uses them more readable than if the operations they express were written out
+ directly.
+ */
+
+infix operator /% : MultiplicationPrecedence
+
+typealias Digit = UInt64
+typealias TwoDigits = (high: Digit, low: Digit)
+
+// -------------------------------------
+internal extension FixedWidthInteger {
+    // -------------------------------------
+    /// Fast creation of an integer from a Bool
+    init(_ source: Bool) {
+        assert(unsafeBitCast(source, to: UInt8.self) & 0xfe == 0)
+        self.init(unsafeBitCast(source, to: UInt8.self))
+    }
+}
+
+// -------------------------------------
+/// Divide a tuple of digits by 1 digit obtaining both quotient and remainder
+internal func /% (left: TwoDigits, right: Digit) -> (quotient: TwoDigits, remainder: TwoDigits) {
+    var r: Digit
+    let q: TwoDigits
+    (q.high, r) = left.high.quotientAndRemainder(dividingBy: right)
+    (q.low, r) = right.dividingFullWidth((high: r, low: left.low))
+    return (q, (high: 0, low: r))
+}
+
+func addReportingCarry(_ x: inout Digit, _ y: Digit) -> Digit {
+    let c: Bool
+    (x, c) = x.addingReportingOverflow(y)
+    return Digit(c)
+}
+
+internal func * (left: TwoDigits, right: Digit) -> TwoDigits {
+    var product = left.low.multipliedFullWidth(by: right)
+    let productHigh = left.high.multipliedFullWidth(by: right)
+    assert(productHigh.high == 0, "multiplication overflow")
+    let c = addReportingCarry(&product.high, productHigh.low)
+    assert(c == 0, "multiplication overflow")
+    return product
+}
+
+internal func > (left: TwoDigits, right: TwoDigits) -> UInt8 {
+    return UInt8(left.high > right.high) |
+            (UInt8(left.high == right.high) & UInt8(left.low > right.low))
+}
+
+// -------------------------------------
+/// Add a digit to a tuple's low part, carrying to the high part.
+func += (left: inout TwoDigits, right: Digit) {
+    left.high &+= addReportingCarry(&left.low, right)
+}
+
+// -------------------------------------
+/// Add one tuple to another tuple
+func += (left: inout TwoDigits, right: TwoDigits) {
+    left.high &+= addReportingCarry(&left.low, right.low)
+    left.high &+= right.high
+}
+
+func subtractReportingBorrow(_ x: inout Digit, _ y: Digit) -> Digit {
+    let b: Bool
+    (x, b) = x.subtractingReportingOverflow(y)
+    return Digit(b)
+}
+
+// -------------------------------------
+/// Subtract a digit from a tuple, borrowing the high part if necessary
+func -= (left: inout TwoDigits, right: Digit) {
+    left.high &-= subtractReportingBorrow(&left.low, right)
 }

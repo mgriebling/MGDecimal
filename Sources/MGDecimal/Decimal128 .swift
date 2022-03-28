@@ -23,7 +23,7 @@ public struct Decimal128 : ExpressibleByStringLiteral, ExpressibleByFloatLiteral
     public static let pi = Decimal128(stringLiteral: "3.1415926535897932384626433832795028841971693993751")
     public static let nan = Decimal128(raw: return_bid128_nan(0, 0, 0))
     public static let quietNaN = Decimal128(raw: return_bid128_nan(0, 0, 0))
-    // public static let signalingNaN = Decimal128(raw: SNAN_MASK64)
+    public static let signalingNaN = Decimal128(raw: UInt128(upper: Decimal64.SNAN_MASK64, lower: 0))
     public static let infinity = Decimal128(raw: return_bid128_inf(0))
     
     public static var greatestFiniteMagnitude: Decimal128 { Decimal128(raw: return_bid128_max(0)) }

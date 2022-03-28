@@ -273,10 +273,10 @@ extension DecimalFloatingPoint {
                 : (1 as Self).exponentBitPattern + Self.RawExponent(exponent)
         }
 
-        let value = Self(
-            sign: source.sign,
-            exponentBitPattern: exponentBitPattern,
-            significandDigits: significandDigits)
+//        let value = Self(
+//            sign: source.sign,
+//            exponentBitPattern: exponentBitPattern,
+//            significandDigits: significandDigits)
 
 //        if source.significandDigitCount <= leadingBitIndex {
 //            return (value, true)

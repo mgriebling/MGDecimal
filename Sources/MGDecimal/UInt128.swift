@@ -84,7 +84,8 @@ public struct UInt128 : Equatable, Comparable, Codable, CustomStringConvertible,
     
     // algorithm from Verilog hardware binary/BCD converter by Nic McDonald
     func binaryToBCD(x:UInt128) -> [UInt8] {
-        let bits = x.bitWidth - x.leadingZeroBitCount
+        if x == 0 { return [0] }
+        let bits = Swift.max(1, x.bitWidth - x.leadingZeroBitCount)
         var x = x
         var res = [UInt8](repeating: 0, count: 40) // 40 digit answer
         for _ in 1...bits {
@@ -170,19 +171,168 @@ extension UInt128 : BinaryInteger {
         return (pl, ph != 0)
     }
     
+    /*************************************************************************************/
+    /**  Following division code was shamelessly borrowed from Chip Jarred who in turn   */
+    /**  implemented the algorithm from Donald Knuth's *Algorithm D* for dividing        */
+    /**  multiprecision unsigned integers from *The Art of Computer Programming*         */
+    /**  Volume 2: *Semi-numerical Algorithms*, Chapter 4.3.3.                           */
+    /**  See also the Macros.swift file at the end for more Digit-related algorithms     */
+    /**  and the associated copyright notice for all this code.                          */
+    
+    func leftShift(_ x: [Digit], by shift: Int, into y: inout [Digit]) {
+        assert(y.count >= x.count)
+        assert(y.startIndex == x.startIndex)
+        let bitWidth = Digit.bitWidth
+        
+        for i in (1..<x.count).reversed() {
+            y[i] = (x[i] << shift) | (x[i - 1] >> (bitWidth - shift))
+        }
+        y[0] = x[0] << shift
+    }
+    
+    func rightShift(_ x: [Digit], by shift: Int, into y: inout [Digit]) {
+        assert(y.count == x.count)
+        assert(y.startIndex == x.startIndex)
+        let bitWidth = Digit.bitWidth
+        
+        let lastElemIndex = x.count - 1
+        for i in 0..<lastElemIndex {
+            y[i] = (x[i] >> shift) | (x[i + 1] << (bitWidth - shift))
+        }
+        y[lastElemIndex] = x[lastElemIndex] >> shift
+    }
+    
+    
+    func divide(_ x: [Digit], by y: Digit, result z: inout [Digit]) -> Digit {
+        assert(x.count == z.count)
+        assert(x.startIndex == z.startIndex)
+        
+        var r: Digit = 0
+        var i = x.count - 1
+        
+        (z[i], r) = x[i].quotientAndRemainder(dividingBy: y)
+        i -= 1
+        
+        while i >= 0 {
+            (z[i], r) = y.dividingFullWidth((r, x[i]))
+            i -= 1
+        }
+        return r
+    }
+        
+    func subtractReportingBorrow(_ x: [Digit], times k: Digit, from y: inout ArraySlice<Digit>) -> Bool {
+        assert(x.count + 1 <= y.count)
+        
+        func subtractReportingBorrow(_ x: inout Digit, _ y: Digit) -> Digit {
+            let b: Bool
+            (x, b) = x.subtractingReportingOverflow(y)
+            return Digit(b)
+        }
+        
+        var i = x.startIndex
+        var j = y.startIndex
+
+        var borrow: Digit = 0
+        while i < x.endIndex {
+            borrow = subtractReportingBorrow(&y[j], borrow)
+            let (pHi, pLo) = k.multipliedFullWidth(by: x[i])
+            borrow &+= pHi
+            borrow &+= subtractReportingBorrow(&y[j], pLo)
+            
+            i &+= 1
+            j &+= 1
+        }
+        return 0 != subtractReportingBorrow(&y[j], borrow)
+    }
+    
+    func divideWithRemainder_KnuthD(_ dividend: (high:UInt128, low:UInt128), by divisor: UInt128, quotient: inout [Digit], remainder: inout [Digit]) {
+        let digitWidth = Digit.bitWidth
+        let dividend = [dividend.low.lo, dividend.low.hi, dividend.high.lo, dividend.high.hi]
+        let divisor =  [divisor.lo, divisor.hi]
+        let m = dividend.count
+        let n = divisor.count
+        
+        assert(n > 0, "Divisor must have at least one digit")
+        assert(divisor.reduce(0) { $0 | $1 } != 0, "Division by 0")
+        assert(m >= n, "Dividend must have at least as many digits as the divisor")
+        assert(quotient.count >= m - n + 1, "Must have space for the number of digits in the dividend minus the "
+                               + "number of digits in the divisor plus one more digit.")
+        assert(remainder.count == n, "Remainder must have space for the same number of digits as the divisor")
+
+        guard n > 1 else {
+            remainder[0] = divide(dividend, by: divisor.first!, result: &quotient)
+            return
+        }
+        
+        let shift = divisor.last!.leadingZeroBitCount
+        
+        var v = [Digit](repeating: 0, count: n)
+        leftShift(divisor, by: shift, into: &v)
+
+        var u = [Digit](repeating: 0, count: m + 1)
+        u[m] = dividend[m - 1] >> (digitWidth - shift)
+        leftShift(dividend, by: shift, into: &u)
+        
+        let vLast: Digit = v.last!
+        let vNextToLast: Digit = v[n - 2]
+        let partialDividendDelta: TwoDigits = (high: vLast, low: 0)
+
+        for j in (0...(m - n)).reversed() {
+            let jPlusN = j &+ n
+            
+            let dividendHead: TwoDigits = (high: u[jPlusN], low: u[jPlusN &- 1])
+            
+            // These are tuple arithemtic operations.  `/%` is custom combined
+            // division and remainder operator.  See TupleMath.swift
+            var (q̂, r̂) = dividendHead /% vLast
+            var partialProduct = q̂ * vNextToLast
+            var partialDividend:TwoDigits = (high: r̂.low, low: u[jPlusN &- 2])
+            
+            while true {
+                if (UInt8(q̂.high != 0) | (partialProduct > partialDividend)) == 1 {
+                    q̂ -= 1
+                    r̂ += vLast
+                    partialProduct -= vNextToLast
+                    partialDividend += partialDividendDelta
+                    
+                    if r̂.high == 0 { continue }
+                }
+                break
+            }
+
+            quotient[j] = q̂.low
+            
+            if subtractReportingBorrow(Array(v[0..<n]), times: q̂.low, from: &u[j...jPlusN]) {
+                quotient[j] &-= 1
+                u[j...jPlusN] += v[0..<n] // digit collection addition!
+            }
+        }
+        
+        rightShift(Array(u[0..<n]), by: shift, into: &remainder)
+    }
+    /**  End of borrowed division code                                                   */
+    /*************************************************************************************/
+
+    
     public func dividedReportingOverflow(by rhs: UInt128) -> (partialValue: UInt128, overflow: Bool) {
-        assert(false, "\(#function) not implemented")
-        return (0, false)
+        var quotient = [Digit](repeating: 0, count: 3)  // dividend.count - divisor.count + 1
+        var remainder = [Digit](repeating: 0, count: 2) // divisor size
+        divideWithRemainder_KnuthD((0, self), by: rhs, quotient: &quotient, remainder: &remainder)
+        return (UInt128(w: quotient), quotient.last! != 0)
     }
     
     public func remainderReportingOverflow(dividingBy rhs: UInt128) -> (partialValue: UInt128, overflow: Bool) {
-        assert(false, "\(#function) not implemented")
-        return (0, false)
+        var quotient = [Digit](repeating: 0, count: 3)  // dividend.count - divisor.count + 1
+        var remainder = [Digit](repeating: 0, count: 2) // divisor size
+        divideWithRemainder_KnuthD((0, self), by: rhs, quotient: &quotient, remainder: &remainder)
+        return (UInt128(w: remainder), quotient.last! != 0)
     }
     
     public func dividingFullWidth(_ dividend: (high: UInt128, low: UInt128)) -> (quotient: UInt128, remainder: UInt128) {
-        assert(false, "\(#function) not implemented")
-        return (0, 0) /* TBD */
+        var quotient = [Digit](repeating: 0, count: 3)  // dividend.count - divisor.count + 1
+        var remainder = [Digit](repeating: 0, count: 2) // divisor size
+        divideWithRemainder_KnuthD(dividend, by: self, quotient: &quotient, remainder: &remainder)
+        return (UInt128(w: quotient), UInt128(w: remainder))
     }
 
     public typealias Words = [UInt]
@@ -216,18 +366,14 @@ extension UInt128 : BinaryInteger {
     }
     
     public static func / (lhs: UInt128, rhs: UInt128) -> UInt128 {
-        assert(rhs != 0, "UInt128: division by zero")
-        guard lhs >= rhs else { return 0 } // underflow
-        if lhs == rhs { return 1 }
-        if lhs == 0 { return 0 }
         let res = lhs.dividedReportingOverflow(by: rhs)
         assert(!res.overflow, "UInt128: division overflow!")
         return res.partialValue
     }
     
     public static func % (lhs: UInt128, rhs: UInt128) -> UInt128 {
-        assert(false, "\(#function) not implemented")
-        return lhs /* TBD */
+        let res = lhs.remainderReportingOverflow(dividingBy: rhs)
+        return res.partialValue
     }
     
     public static func & (lhs: UInt128, rhs: UInt128) -> UInt128 { UInt128(upper:lhs.hi & rhs.hi, lower:lhs.lo & rhs.lo) }
