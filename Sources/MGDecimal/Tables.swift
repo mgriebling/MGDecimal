@@ -15799,8 +15799,8 @@ func roundboundIndex(_ round:Rounding, _ negative:Bool=false, _ lsb:Int=0) -> In
         case BID_ROUNDING_TO_NEAREST: index += 0
         case BID_ROUNDING_DOWN: index += 4
         case BID_ROUNDING_UP: index += 8
-        case BID_ROUNDING_TO_ZERO: index += 16
-        default: index += 32
+        case BID_ROUNDING_TO_ZERO: index += 12
+        default: index += 16
     }
     return index
 }

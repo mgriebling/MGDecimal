@@ -158,7 +158,7 @@ extension Decimal32 {
                 if rdx_pt_enc {
                     right_radix_leading_zeros+=1
                 }
-                // if this character is a radix point, make sure we haven"t already
+                // if this character is a radix point, make sure we haven't already
                 // encountered one
                 if c == "." {
                     if !rdx_pt_enc {
@@ -177,7 +177,7 @@ extension Decimal32 {
                         // if 2 radix points, return NaN
                         return NAN_MASK32 | sign_x
                     }
-                } else if !ps.isEmpty {
+                } else if ps.isEmpty {
                     right_radix_leading_zeros = EXPONENT_BIAS - right_radix_leading_zeros
                     if right_radix_leading_zeros < 0 {
                         right_radix_leading_zeros = 0
@@ -271,7 +271,7 @@ extension Decimal32 {
         if c == "-" || c == "+" {
             c = ps.isEmpty ? "\0" : ps.removeFirst()
         }
-        if ps.isEmpty || c < "0" || c > "9" {
+        if c == "\0" || c < "0" || c > "9" {
             // return NaN
             return NAN_MASK32 | sign_x
         }

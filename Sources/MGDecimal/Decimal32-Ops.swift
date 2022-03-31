@@ -121,12 +121,12 @@ extension Decimal32 {
             }
         }
         
-        var sign_ab = (Int64(sign_a ^ sign_b))<<32
-        sign_ab = Int64(sign_ab) >> 63
-        let CB = (Int64(coefficient_b) + sign_ab) ^ sign_ab
+        var sign_ab = Int64(sign_a ^ sign_b)<<32
+        sign_ab = sign_ab >> 63
+        let CB = UInt64(bitPattern: (Int64(coefficient_b) + sign_ab) ^ sign_ab)
         
         let SU = UInt64(coefficient_a) * bid_power10_table_128[diff_dec_expon].lo
-        var S = Int64(SU) + CB
+        var S = Int64(bitPattern: SU &+ CB)
         
         if S<0 {
             sign_a ^= SIGN_MASK32
@@ -154,10 +154,10 @@ extension Decimal32 {
         
         let extra_digits = n_digits - 7
         
-        let irmode = roundboundIndex(rmode, sign_a != 0, 0)
-//        if (sign_a != 0 && (irmode - 1) < 2) {
-//            irmode = 3 - irmode;
-//        }
+        var irmode = roundboundIndex(rmode) >> 2
+        if sign_a != 0 && (UInt(irmode) &- 1) < 2 {
+            irmode = 3 - irmode
+        }
         
         // add a constant to P, depending on rounding mode
         // 0.5*10^(digits_p - 16) for round-to-nearest
@@ -738,7 +738,6 @@ extension Decimal32 {
      ****************************************************************************/
     
     static func div(_ x:UInt32, _ y:UInt32, _ rmode:Rounding, _ status:inout Status) -> UInt32 {
-        //      BID_OPT_SAVE_BINARY_FLAGS()
         var sign_x = UInt32(0), sign_y = UInt32(0), exponent_x = 0, exponent_y = 0
         var coefficient_x = UInt32(0), coefficient_y = UInt32(0)
         let valid_x = unpack_BID32 (&sign_x, &exponent_x, &coefficient_x, x)
@@ -749,7 +748,6 @@ extension Decimal32 {
             // x is Inf. or NaN
             if (y & SNAN_MASK32) == SNAN_MASK32 {   // y is sNaN
                 status.insert(.invalidOperation)
-                //__set_status_flags (pfpsf, BID_INVALID_EXCEPTION);
             }
             
             // test if x is NaN
@@ -938,10 +936,10 @@ extension Decimal32 {
         }
         
         if diff_expon >= 0 {
-            let rmode1 = roundboundIndex(rmode, (sign_x ^ sign_y) != 0, 0)
-//            if (sign_x ^ sign_y) != 0 && UInt32(rmode1 - 1) < 2 {
-//                rmode1 = 3 - rmode1
-//            }
+            var rmode1 = roundboundIndex(rmode) >> 2
+            if (sign_x ^ sign_y) != 0 && (UInt32(rmode1) &- 1) < 2 {
+                rmode1 = 3 - rmode1
+            }
             switch rmode1 {
                 case 0, 4:
                     // R*10

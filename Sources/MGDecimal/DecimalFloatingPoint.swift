@@ -273,29 +273,17 @@ extension DecimalFloatingPoint {
                 : (1 as Self).exponentBitPattern + Self.RawExponent(exponent)
         }
 
-//        let value = Self(
-//            sign: source.sign,
-//            exponentBitPattern: exponentBitPattern,
-//            significandDigits: significandDigits)
+        let value = Self(
+            sign: source.sign,
+            exponentBitPattern: exponentBitPattern,
+            significandDigits: significandDigits)
 
-//        if source.significandDigitCount <= leadingBitIndex {
-//            return (value, true)
-//        }
-//        // We promise to round to the closest representation. Therefore, we must
-//        // take a look at the bits that we've just truncated.
-//        let ulp = (1 as Source.RawSignificand) << -shift
-//        let truncatedBits = source.significandDigits & (ulp - 1)
-//        if truncatedBits < ulp / 2 {
-//            return (value, false)
-//        }
-//        let rounded = isMinus ? value.nextDown : value.nextUp
-//        if _fastPath(truncatedBits > ulp / 2) {
-//            return (rounded, false)
-//        }
-//        // If two representable values are equally close, we return the value with
-//        // more trailing zeros in its significand bit pattern.
-//        return significandDigits > rounded.significandDigits ? (value, false) : (rounded, false)
-        return (0, false)
+        if source.significandDigitCount <= Self.significandMaxDigitCount {
+            return (value, true)
+        }
+
+        // Numbers are rounded automatically during init so nothing else to see here
+        return (value, false)
     }
 
     /// Creates a new instance from the given value, rounded to the closest

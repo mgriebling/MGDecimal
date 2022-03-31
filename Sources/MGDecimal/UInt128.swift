@@ -283,7 +283,7 @@ extension UInt128 : BinaryInteger {
             let dividendHead: TwoDigits = (high: u[jPlusN], low: u[jPlusN &- 1])
             
             // These are tuple arithemtic operations.  `/%` is custom combined
-            // division and remainder operator.  See TupleMath.swift
+            // division and remainder operator.  See Macros.swift
             var (q̂, r̂) = dividendHead /% vLast
             var partialProduct = q̂ * vNextToLast
             var partialDividend:TwoDigits = (high: r̂.low, low: u[jPlusN &- 2])
@@ -349,30 +349,31 @@ extension UInt128 : BinaryInteger {
     
     public static func - (lhs: UInt128, rhs: UInt128) -> UInt128 {
         let res = lhs.subtractingReportingOverflow(rhs)
-        assert(!res.overflow, "UInt128: subtraction overflow!")
+        assert(!res.overflow, "UInt128: \(#function) overflow!")
         return res.partialValue
     }
     
     public static func + (lhs: UInt128, rhs: UInt128) -> UInt128 {
         let res = lhs.addingReportingOverflow(rhs)
-        assert(!res.overflow, "UInt128: addition overflow!")
+        assert(!res.overflow, "UInt128: \(#function) overflow!")
         return res.partialValue
     }
     
     public static func * (lhs: UInt128, rhs: UInt128) -> UInt128 {
         let res = lhs.multipliedReportingOverflow(by: rhs)
-        assert(!res.overflow, "UInt128: multiplication overflow!")
+        assert(!res.overflow, "UInt128: \(#function) overflow!")
         return res.partialValue
     }
     
     public static func / (lhs: UInt128, rhs: UInt128) -> UInt128 {
         let res = lhs.dividedReportingOverflow(by: rhs)
-        assert(!res.overflow, "UInt128: division overflow!")
+        assert(!res.overflow, "UInt128: \(#function) overflow!")
         return res.partialValue
     }
     
     public static func % (lhs: UInt128, rhs: UInt128) -> UInt128 {
         let res = lhs.remainderReportingOverflow(dividingBy: rhs)
+        assert(!res.overflow, "UInt128: \(#function) overflow!")
         return res.partialValue
     }
     

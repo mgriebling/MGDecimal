@@ -13,8 +13,8 @@ public struct Decimal128 : ExpressibleByStringLiteral, ExpressibleByFloatLiteral
     
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // MARK: - Class State variables
-    public static private(set) var state = Status.clearFlags
-    public static private(set) var rounding = Rounding.toNearestOrEven
+    public static var state = Status.clearFlags
+    public static var rounding = Rounding.toNearestOrEven
     
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // MARK: - Class State constants

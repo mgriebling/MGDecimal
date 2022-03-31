@@ -147,19 +147,19 @@ func __unsigned_compare_gt_128(_ A:UInt128, _ B:UInt128) -> Bool {
 // 2^53 <= c < 2^54   (decimal64)
 // 2^112 <= c < 2^113 (decimal128)
 @inlinable func unpack_bid32(_ x:UInt32, _ s: inout Int, _ e: inout Int, _ k: inout Int, _ c: inout UInt64, _ status: inout Status) -> Double? {
-    s = Int(x) >> 31
-    if ((x & (3<<29)) == (3<<29)) {
-        if ((x & (0xF<<27)) == (0xF<<27)) {
-            if ((x & (0x1F<<26)) != (0x1F<<26)) { return return_double_inf(s) }
-            if ((x & (1<<25)) != 0) { status.insert(.invalidOperation) }
-            return return_double_nan(s, UInt64(((x & 0xFFFFF) > 999999) ? 0 : Int(x) << 44), 0)
+    s = Int(x >> 31)
+    if (x & (UInt32(3)<<29)) == (UInt32(3)<<29) {
+        if ((x & (UInt32(0xF)<<27)) == (UInt32(0xF)<<27)) {
+            if ((x & (UInt32(0x1F<<26))) != (UInt32(0x1F)<<26)) { return return_double_inf(s) }
+            if ((x & (UInt32(1)<<25)) != 0) { status.insert(.invalidOperation) }
+            return return_double_nan(s, ((x & 0xFFFFF) > 999999) ? 0 : UInt64(x) << 44, 0)
         }
-        e = Int((x >> 21) & ((1<<8)-1)) - 101
-        c = UInt64((1<<23) + (x & ((1<<21)-1)))
+        e = Int((x >> 21) & ((UInt32(1)<<8)-1)) - 101
+        c = UInt64((UInt32(1)<<23) + (x & ((UInt32(1)<<21)-1)))
         if (UInt(c) > 9999999) { return return_double_zero(s) }
         k = 0
     } else {
-        e = Int((x >> 23) & ((1<<8)-1)) - 101
+        e = Int((x >> 23) & ((UInt32(1)<<8)-1)) - 101
         c = UInt64(x) & (UInt64(1)<<23 - 1)
         if c == 0 { return return_double_zero(s) }
         k = clz32(UInt32(c)) - 8

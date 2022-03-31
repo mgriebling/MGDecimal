@@ -23,9 +23,9 @@ func addDecimalPointAndExponent(_ ps:String, _ exponent:Int, _ maxDigits:Int) ->
             ps += "+"
         }
         ps += String(exponent_x)
-    } else if digits < exponent_x {
+    } else if digits <= exponent_x {
         // format the number without an exponent
-        while digits < exponent_x {
+        while digits <= exponent_x {
             // pad the number with zeros
             ps += "0"; digits += 1
         }

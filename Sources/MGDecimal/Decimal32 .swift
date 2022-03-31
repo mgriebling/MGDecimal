@@ -18,8 +18,8 @@ public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, E
     
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // MARK: - Class State variables
-    public static private(set) var state = Status.clearFlags
-    public static private(set) var rounding = FloatingPointRoundingRule.toNearestOrEven
+    static public var state = Status.clearFlags
+    static public var rounding = FloatingPointRoundingRule.toNearestOrEven
     
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // MARK: - Class State constants
@@ -41,7 +41,7 @@ public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, E
     
     private func showState() {
         if Decimal32.enableStateOutput && !Decimal32.state.isEmpty { print("Warning: \(Decimal32.state)") }
-        Decimal32.state = .clearFlags
+        // Decimal32.state = .clearFlags
     }
     
     /// Binary Integer Decimal encoded 32-bit number
@@ -79,7 +79,13 @@ public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, E
     }
 
     public init(stringLiteral value: String) {
-        x = Decimal32.bid32_from_string(value, Decimal32.rounding, &Decimal32.state)
+        if value.hasPrefix("0x") {
+            var s = value; s.removeFirst(2)
+            let n = UInt32(s, radix: 16) ?? 0
+            x = n
+        } else {
+            x = Decimal32.bid32_from_string(value, Decimal32.rounding, &Decimal32.state)
+        }
         showState()
     }
     

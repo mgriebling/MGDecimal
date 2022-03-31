@@ -238,43 +238,7 @@ extension Decimal32 {
                 case  ..<1_000_000_000_000_000_000: q = 18; ind = 11 // number of digits to remove for q = 14
                 default:                            q = 19; ind = 12 // number of digits to remove for q = 19
             }
-//            if C < 100_000_000 { // x < 10^8
-//                q = 8
-//                ind = 1    // number of digits to remove for q = 8
-//            } else if C < 1_000_000_000 { // C < 10^9
-//                q = 9
-//                ind = 2   // number of digits to remove for q = 9
-//            } else if C < 10_000_000_000 { // C < 10^10
-//                q = 10
-//                ind = 3  // number of digits to remove for q = 10
-//            } else if C < 100_000_000_000 { // C < 10^11
-//                q = 11
-//                ind = 4  // number of digits to remove for q = 11
-//            } else if C < 1_000_000_000_000 { // C < 10^12
-//                q = 12
-//                ind = 5  // number of digits to remove for q = 12
-//            } else if C < 10_000_000_000_000 { // C < 10^13
-//                q = 13
-//                ind = 6  // number of digits to remove for q = 13
-//            } else if C < 100_000_000_000_000 { // C < 10^14
-//                q = 14
-//                ind = 7  // number of digits to remove for q = 14
-//            } else if C < 1_000_000_000_000_000 { // C < 10^15
-//                q = 15
-//                ind = 8  // number of digits to remove for q = 15
-//            } else if C < 10_000_000_000_000_000 { // C < 10^16
-//                q = 16
-//                ind = 9  // number of digits to remove for q = 16
-//            } else if C < 100_000_000_000_000_000 { // C < 10^17
-//                q = 17
-//                ind = 10  // number of digits to remove for q = 17
-//            } else if C < 1_000_000_000_000_000_000 { // C < 10^18
-//                q = 18
-//                ind = 11  // number of digits to remove for q = 18
-//            } else { // C < 10^19
-//                q = 19
-//                ind = 12    // number of digits to remove for q = 19
-//            }
+
             // overflow and underflow are not possible
             // Note: performance can be improved by inlining this call
             var is_midpoint_lt_even = false, is_midpoint_gt_even = false, is_inexact_lt_midpoint = false
@@ -631,22 +595,6 @@ extension Decimal32 {
             coeff = 1000000
         }
         return very_fast_get_BID32(sgn, expon, coeff)
-//        // check whether coefficient fits in 10*2+3 bits
-//        var r: UInt32
-//        if coeff < mask {
-//            r = UInt32(expon)
-//            r <<= 23
-//            r |= (coeff | sgn)
-//            return r;
-//        }
-//        // special format
-//        r = UInt32(expon)
-//        r <<= 21
-//        r |= (sgn | SPECIAL_ENCODING_MASK32)
-//        // add coeff, without leading bits
-//        mask = (1 << 21) - 1
-//        r |= coeff & mask
-//        return r
     }
     
     //
@@ -659,11 +607,11 @@ extension Decimal32 {
         
         if coeff > MAX_NUMBER {
             expon += 1
-            coeff = 1000000
+            coeff = UInt32(MAX_NUMBERP1)
         }
         
         // check for possible underflow/overflow
-        if UInt32(expon) > MAX_EXPON {
+        if UInt32(bitPattern:Int32(expon)) > MAX_EXPON {
             if expon < 0 {
                 // underflow
                 if expon + MAX_DIGITS < 0 {
@@ -674,81 +622,82 @@ extension Decimal32 {
                     if (rmode == .up && sgn == 0) {
                         return 1
                     }
+                    
+                    // result is 0
+                    return sgn
                 }
-                // result is 0
-                return sgn
-            }
-            
-            // swap up & down round modes when negative
-            if sgn != 0 {
-                if rmode == .up { rmode = .down }
-                else if rmode == .down { rmode = .up }
-            }
-            
-            // determine the rounding table index
-            let roundIndex = roundboundIndex(rmode, false, 0) >> 2
-            
-            // get digits to be shifted out
-            let extra_digits = -expon
-            coeff += UInt32(bid_round_const_table[roundIndex][extra_digits])
-            
-            // get coeff*(2^M[extra_digits])/10^extra_digits
-            var Q : UInt128 = UInt128(w: [0, 0])
-            __mul_64x64_to_128 (&Q, UInt64(coeff), bid_reciprocals10_64[extra_digits]);
-            
-            // now get P/10^extra_digits: shift Q_high right by M[extra_digits]-128
-            let amount = bid_short_recip_scale[extra_digits]
-            
-            var _C64 = Q.hi >> amount
-            var remainder_h = UInt64(0)
-            
-            if rmode == BID_ROUNDING_TO_NEAREST {
-                if (_C64 & 1 != 0) {
-                    // check whether fractional part of initial_P/10^extra_digits is exactly .5
-                    
-                    // get remainder
-                    let amount2 = 64 - amount
-                    remainder_h = 0
-                    remainder_h &-= 1
-                    remainder_h >>= amount2
-                    remainder_h = remainder_h & Q.hi
-                    
-                    if remainder_h == 0 && Q.lo < bid_reciprocals10_64[extra_digits] {
-                        _C64 -= 1
+                
+                // swap up & down round modes when negative
+                if sgn != 0 {
+                    if rmode == .up { rmode = .down }
+                    else if rmode == .down { rmode = .up }
+                }
+                
+                // determine the rounding table index
+                let roundIndex = roundboundIndex(rmode) >> 2
+                
+                // get digits to be shifted out
+                let extra_digits = -expon
+                coeff += UInt32(bid_round_const_table[roundIndex][extra_digits])
+                
+                // get coeff*(2^M[extra_digits])/10^extra_digits
+                var Q : UInt128 = UInt128(w: [0, 0])
+                __mul_64x64_to_128 (&Q, UInt64(coeff), bid_reciprocals10_64[extra_digits]);
+                
+                // now get P/10^extra_digits: shift Q_high right by M[extra_digits]-128
+                let amount = bid_short_recip_scale[extra_digits]
+                
+                var _C64 = Q.hi >> amount
+                var remainder_h = UInt64(0)
+                
+                if rmode == BID_ROUNDING_TO_NEAREST {
+                    if (_C64 & 1 != 0) {
+                        // check whether fractional part of initial_P/10^extra_digits is exactly .5
+                        
+                        // get remainder
+                        let amount2 = 64 - amount
+                        remainder_h = 0
+                        remainder_h &-= 1
+                        remainder_h >>= amount2
+                        remainder_h = remainder_h & Q.hi
+                        
+                        if remainder_h == 0 && Q.lo < bid_reciprocals10_64[extra_digits] {
+                            _C64 -= 1
+                        }
                     }
                 }
-            }
-            
-            if fpsc.contains(.inexact) {
-                fpsc.insert(.underflow)
-            } else {
-                var status = Status.inexact
-                // get remainder
-                remainder_h = Q.hi << (64 - amount)
                 
-                switch rmode {
-                    case BID_ROUNDING_TO_NEAREST, BID_ROUNDING_TIES_AWAY:
-                        // test whether fractional part is 0
-                        if (remainder_h == Decimal64.SIGN_MASK64 && (Q.lo < bid_reciprocals10_64[extra_digits])) {
-                            status = Status.clearFlags // BID_EXACT_STATUS;
-                        }
-                    case BID_ROUNDING_DOWN, BID_ROUNDING_TO_ZERO:
-                        if remainder_h == 0 && Q.lo < bid_reciprocals10_64[extra_digits] {
-                            status = Status.clearFlags // BID_EXACT_STATUS;
-                        }
-                    default:
-                        // round up
-                        var Stemp = UInt64(0), carry = UInt64(0)
-                        __add_carry_out (&Stemp, &carry, Q.lo, bid_reciprocals10_64[extra_digits]);
-                        if (remainder_h >> (64 - amount)) + carry >= UInt64(1) << amount {
-                            status = Status.clearFlags // BID_EXACT_STATUS;
-                        }
-                }
-                
-                if !status.isEmpty {
-                    status.insert(.underflow)
-                    fpsc.formUnion(status)
-                    //                  __set_status_flags (fpsc, BID_UNDERFLOW_EXCEPTION | status);
+                if fpsc.contains(.inexact) {
+                    fpsc.insert(.underflow)
+                } else {
+                    var status = Status.inexact
+                    // get remainder
+                    remainder_h = Q.hi << (64 - amount)
+                    
+                    switch rmode {
+                        case BID_ROUNDING_TO_NEAREST, BID_ROUNDING_TIES_AWAY:
+                            // test whether fractional part is 0
+                            if (remainder_h == Decimal64.SIGN_MASK64 && (Q.lo < bid_reciprocals10_64[extra_digits])) {
+                                status = Status.clearFlags // BID_EXACT_STATUS;
+                            }
+                        case BID_ROUNDING_DOWN, BID_ROUNDING_TO_ZERO:
+                            if remainder_h == 0 && Q.lo < bid_reciprocals10_64[extra_digits] {
+                                status = Status.clearFlags // BID_EXACT_STATUS;
+                            }
+                        default:
+                            // round up
+                            var Stemp = UInt64(0), carry = UInt64(0)
+                            __add_carry_out (&Stemp, &carry, Q.lo, bid_reciprocals10_64[extra_digits]);
+                            if (remainder_h >> (64 - amount)) + carry >= UInt64(1) << amount {
+                                status = Status.clearFlags // BID_EXACT_STATUS;
+                            }
+                    }
+                    
+                    if !status.isEmpty {
+                        status.insert(.underflow)
+                        fpsc.formUnion(status)
+                    }
+                    
                 }
                 
                 return sgn | UInt32(_C64)
@@ -815,7 +764,7 @@ extension Decimal32 {
             coeff = 1000000
         }
         // check for possible underflow/overflow
-        if UInt32(expon) > MAX_EXPON {
+        if UInt32(bitPattern: Int32(expon)) > MAX_EXPON {
             if expon < 0 {
                 // underflow
                 if (expon + MAX_DIGITS < 0) {
