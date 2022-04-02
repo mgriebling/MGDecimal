@@ -38,6 +38,27 @@ extension Decimal128 {
     static let MASK_EXP                 = UInt64(0x7ffe_0000_0000_0000)
     
     /*
+     * Takes a BID32 as input and converts it to a BID128 and returns it.
+     */
+    static func bid32_to_bid128(_ x:UInt32, _ pfpsf: inout Status) -> UInt128 {
+        var sign_x = UInt32(), coefficient_x = UInt32(), exponent_x = 0, res = UInt128()
+        if !Decimal32.unpack_BID32(&sign_x, &exponent_x, &coefficient_x, x) {
+            if (x & 0x78000000) == 0x78000000 {
+                if (x & 0x7e000000) == 0x7e000000 {   // sNaN
+                    pfpsf.insert(.invalidOperation)
+                }
+                res.lo = UInt64((coefficient_x & 0x000fffff))
+                __mul_64x128_low(&res, res.lo, bid_power10_table_128[27])
+                res.hi |= (UInt64(coefficient_x) << 32) & 0xfc00000000000000
+                return res
+            }
+        }
+        
+        let new_coeff = UInt128.init(upper: 0, lower: UInt64(coefficient_x))
+        return bid_get_BID128_very_fast(UInt64(sign_x) << 32, exponent_x + EXPONENT_BIAS - Decimal32.EXPONENT_BIAS, new_coeff)
+    }    // convert_bid32_to_bid128
+    
+    /*
      * Takes a BID128 as input and converts it to a BID32 and returns it.
      */
     static func bid128_to_bid32 (_ x: UInt128, _ rmode: Rounding, _ pfpsf: inout Status) -> UInt32 {

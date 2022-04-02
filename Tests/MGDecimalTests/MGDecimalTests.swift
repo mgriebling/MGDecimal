@@ -200,7 +200,7 @@ final class MGDecimalTests: XCTestCase {
             TestCase("bid32_div", 0, "0E+89", "9.999999E+96", 0x32000000, 0x00),
             TestCase("bid32_div", 0, "0x0f4a7e34", "0xdf2fffff", 0x80000000, 0x30),
             TestCase("bid32_div", 0, "1.0", "0x00000001", 0x78000000, 0x28),
-            TestCase("bid32_div", 0, "1.0", "0x00080001", 0x5f1d1a91, 0x20),        // 10
+            TestCase("bid32_div", 0, "1.0", "0x00080001", 0x5f1d1a91, 0x20),          // 10
             TestCase("bid32_div", 0, "1.0", "1.0", 0x32800001, 0x00),
             TestCase("bid32_div", 0, "-1.0", "1.0", 0xb2800001, 0x00),
             TestCase("bid32_div", 0, "1.0", "-1.0", 0xb2800001, 0x00),
@@ -215,7 +215,7 @@ final class MGDecimalTests: XCTestCase {
             TestCase("bid32_div", 0, "1.0", "0x7e100100", 0x7c000100, 0x01),
             TestCase("bid32_div", 0, "1.0", "0x7e8f423f", 0x7c0f423f, 0x01),
             TestCase("bid32_div", 0, "1.0", "0x7e8f4240", 0x7c000000, 0x01),
-            TestCase("bid32_div", 0, "1.0", "0x80000001", 0xf8000000, 0x28),        // 25
+            TestCase("bid32_div", 0, "1.0", "0x80000001", 0xf8000000, 0x28),          // 25
             TestCase("bid32_div", 0, "1.0", "9.999999e-95", 0x5e8f4240, 0x20),
             TestCase("bid32_div", 0, "1.0", "-9.999999e-95", 0xde8f4240, 0x20),
             TestCase("bid32_div", 0, "1.0", "9.999999e96", 0x00002710, 0x30),
@@ -227,7 +227,7 @@ final class MGDecimalTests: XCTestCase {
             TestCase("bid32_div", 0, "1.0", "0xfe000000", 0xfc000000, 0x01),
             TestCase("bid32_div", 0, "0x15000000", "0x4d8583fd", 0x00000000, 0x00),   // 35
             TestCase("bid32_div", 0, "1E+89", "0.5", 0x5f000002, 0x00),
-            TestCase("bid32_div", 0, "1E+89",  "1.000000E+96", 0x2f000001, 0x00),
+            TestCase("bid32_div", 0, "1E+89",  "1.000000E+96", 0x2f000001, 0x00),     // fail
             TestCase("bid32_div", 0, "0x23000000", "0x6896ff7f", 0x33800000, 0x00),
             TestCase("bid32_div", 0, "0x6098967f", "1.0", 0x6098967f, 0x00),
             TestCase("bid32_div", 0, "0x60989680", "1.0", 0x02800000, 0x00),          // 40
@@ -255,7 +255,7 @@ final class MGDecimalTests: XCTestCase {
             TestCase("bid32_div", 0, "0xfe000000", "1.0", 0xfc000000, 0x01),
             TestCase("bid32_div", 0, "Infinity", "Infinity", 0x7c000000, 0x01),
             TestCase("bid32_div", 0, "Infinity", "NaN", 0x7c000000, 0x00),
-            TestCase("bid32_div", 1, "0x803c6719", "0xa77f173f", 0x08488551, 0x20), // 65
+            TestCase("bid32_div", 1, "0x803c6719", "0xa77f173f", 0x08488551, 0x20),   // 65
             TestCase("bid32_div", 2, "0x803c6719", "0xa77f173f", 0x08488552, 0x20),
             TestCase("bid32_div", 2, "0xc27912d4", "0x6c2e0ad6", 0xf0220ff5, 0x20),
             
@@ -537,7 +537,7 @@ final class MGDecimalTests: XCTestCase {
             TestCase("bid32_mul", 0, "0xfe000000", "1.0", 0xfc000000, 0x01),
             TestCase("bid32_mul", 0, "Infinity", "NaN", 0x7c000000, 0x00),
             
-            TestCase("bid32_negate", 0, "0x00000001", 0x80000001, 0x00),
+            TestCase("bid32_negate", 0, "0x00000001", 0x80000001, 0x00),    // 1
             TestCase("bid32_negate", 0, "0x00080001", 0x80080001, 0x00),
             TestCase("bid32_negate", 0, "-1.0", 0x3200000a, 0x00),
             TestCase("bid32_negate", 0, "1.0", 0xb200000a, 0x00),
@@ -546,7 +546,7 @@ final class MGDecimalTests: XCTestCase {
             TestCase("bid32_negate", 0, "0x6098967f", 0xe098967f, 0x00),
             TestCase("bid32_negate", 0, "0x60989680", 0xe0989680, 0x00),
             TestCase("bid32_negate", 0, "0x7c000000", 0xfc000000, 0x00),
-            TestCase("bid32_negate", 0, "0x7c8f423f", 0xfc8f423f, 0x00),
+            TestCase("bid32_negate", 0, "0x7c8f423f", 0xfc8f423f, 0x00),    // 10
             TestCase("bid32_negate", 0, "0x7c8f4240", 0xfc8f4240, 0x00),
             TestCase("bid32_negate", 0, "0x7e100000", 0xfe100000, 0x00),
             TestCase("bid32_negate", 0, "0x7e100100", 0xfe100100, 0x00),
@@ -556,7 +556,7 @@ final class MGDecimalTests: XCTestCase {
             TestCase("bid32_negate", 0, "-9.999999e-95", 0x6018967f, 0x00),
             TestCase("bid32_negate", 0, "9.999999e-95", 0xe018967f, 0x00),
             TestCase("bid32_negate", 0, "-9.999999e96", 0x77f8967f, 0x00),
-            TestCase("bid32_negate", 0, "9.999999e96", 0xf7f8967f, 0x00),
+            TestCase("bid32_negate", 0, "9.999999e96", 0xf7f8967f, 0x00),   // 20
             TestCase("bid32_negate", 0, "0xfc100000", 0x7c100000, 0x00),
             TestCase("bid32_negate", 0, "0xfc100100", 0x7c100100, 0x00),
             TestCase("bid32_negate", 0, "0xfe000000", 0x7e000000, 0x00),
@@ -1089,7 +1089,14 @@ final class MGDecimalTests: XCTestCase {
             TestCase("bid32_to_binary64", 4, "0xf7f8967f", 0xd412ba093e5c6114, 0x20),
             TestCase("bid32_to_binary64", 4, "0xf8000000", 0xfff0000000000000, 0x00),
             
-            TestCase("bid32_to_uint64_int", 0, "0x2F4C4B40", 0, 0x00), // 0.5
+            TestCase("bid32_to_int64_int", 0, "0xb348af10", UInt64(bitPattern: -47634080), 0x00),
+            TestCase("bid32_to_int64_int", 0, "0xb8fd0b20", UInt64(bitPattern: -8194848000000000000), 0x00),
+            TestCase("bid32_to_int64_int", 0, "0xb118546b", UInt64(bitPattern: -1594), 0x00),
+            TestCase("bid32_to_int64_int", 0, "0xb2e373ef", UInt64(bitPattern: -6517743), 0x00),
+            TestCase("bid32_to_int64_int", 0, "0x6e37ff6b", UInt64(bitPattern: -9223372036854775808), 0x01),
+            TestCase("bid32_to_int64_int", 0, "0xee34dc83", UInt64(bitPattern: -9223372036854775808), 0x01),
+                     
+            TestCase("bid32_to_uint64_int", 0, "0x2F4C4B40", 0, 0x00), // 0.5                           // 1
             TestCase("bid32_to_uint64_int", 0, "0x2F8F4240", 1, 0x00), // 1
             TestCase("bid32_to_uint64_int", 0, "0x2F96E360", 1, 0x00), // 1.5
             TestCase("bid32_to_uint64_int", 0, "0x30ADC6C0", 300, 0x00), // 300
@@ -1098,71 +1105,35 @@ final class MGDecimalTests: XCTestCase {
             TestCase("bid32_to_uint64_int", 0, "0x32000005", 0, 0x00), // 0.5
             TestCase("bid32_to_uint64_int", 0, "0x3200000F", 1, 0x00), // 1.5
             TestCase("bid32_to_uint64_int", 0, "0x32000BBD", 300, 0x00), // 300.5
-            TestCase("bid32_to_uint64_int", 0, "0x32800001", 1, 0x00), // 1
+            TestCase("bid32_to_uint64_int", 0, "0x32800001", 1, 0x00), // 1                             // 10
             TestCase("bid32_to_uint64_int", 0, "0x33800003", 300, 0x00), // 300
             TestCase("bid32_to_uint64_int", 0, "0x343D0900", 4000000000, 0x00), // 4e9
             TestCase("bid32_to_uint64_int", 0, "0x344C4B40", 5000000000, 0x00), // 5e9
             TestCase("bid32_to_uint64_int", 0, "0x349E8480", 20000000000, 0x00), // 2e10
-            TestCase("bid32_to_uint64_int", 0, "0x349E8480", 20000000000, 0x00), // 2e10-0.5
-            TestCase("bid32_to_uint64_int", 0, "0x349E8480", 20000000000, 0x00), // 2e10+0.5
-            TestCase("bid32_to_uint64_int", 0, "0x349E8480", 20000000000, 0x00), // 2e10-1
-            TestCase("bid32_to_uint64_int", 0, "0x349E8480", 20000000000, 0x00), // 2e10+1
-            TestCase("bid32_to_uint64_int", 0, "0x349E8480", 20000000000, 0x00), // 2e10-1.5
-            TestCase("bid32_to_uint64_int", 0, "0x349E8480", 20000000000, 0x00), // 2e10+1.5
             TestCase("bid32_to_uint64_int", 0, "0x3635AFE5", 35184370000000, 0x00), // 2^45
-            TestCase("bid32_to_uint64_int", 0, "0x3635AFE5", 35184370000000, 0x00), // 2^45+0.5
             TestCase("bid32_to_uint64_int", 0, "0x37000004", 4000000000, 0x00), // 4e9
             TestCase("bid32_to_uint64_int", 0, "0x37000005", 5000000000, 0x00), // 5e9
             TestCase("bid32_to_uint64_int", 0, "0x371E8480", 2000000000000000, 0x00), // 2e15
-            TestCase("bid32_to_uint64_int", 0, "0x371E8480", 2000000000000000, 0x00), // 2e15-0.5
-            TestCase("bid32_to_uint64_int", 0, "0x371E8480", 2000000000000000, 0x00), // 2e15+0.5
-            TestCase("bid32_to_uint64_int", 0, "0x371E8480", 2000000000000000, 0x00), // 2e15-1
-            TestCase("bid32_to_uint64_int", 0, "0x371E8480", 2000000000000000, 0x00), // 2e15+1
-            TestCase("bid32_to_uint64_int", 0, "0x371E8480", 2000000000000000, 0x00), // 2e15-1.5
-            TestCase("bid32_to_uint64_int", 0, "0x371E8480", 2000000000000000, 0x00), // 2e15+1.5
             TestCase("bid32_to_uint64_int", 0, "0x37800002", 20000000000, 0x00), // 2e10
-            TestCase("bid32_to_uint64_int", 0, "0x37800002", 20000000000, 0x00), // 2e10-0.5
-            TestCase("bid32_to_uint64_int", 0, "0x37800002", 20000000000, 0x00), // 2e10+0.5
-            TestCase("bid32_to_uint64_int", 0, "0x37800002", 20000000000, 0x00), // 2e10-1
-            TestCase("bid32_to_uint64_int", 0, "0x37800002", 20000000000, 0x00), // 2e10+1
-            TestCase("bid32_to_uint64_int", 0, "0x37800002", 20000000000, 0x00), // 2e10-1.5
-            TestCase("bid32_to_uint64_int", 0, "0x37800002", 20000000000, 0x00), // 2e10+1.5
-            TestCase("bid32_to_uint64_int", 0, "0x390F4240", 10000000000000000000, 0x00), // 1e19
-            TestCase("bid32_to_uint64_int", 0, "0x390F4240", 10000000000000000000, 0x00), // 1e19+0.5
+            TestCase("bid32_to_uint64_int", 0, "0x390F4240", 10000000000000000000, 0x00), // 1e19       // 20
             TestCase("bid32_to_uint64_int", 0, "0x3916E360", 15000000000000000000, 0x00), // 1.5e19
             TestCase("bid32_to_uint64_int", 0, "0x391C25C2", 18446740000000000000, 0x00), // 2^64
-            TestCase("bid32_to_uint64_int", 0, "0x391C25C2", 18446740000000000000, 0x00), // 2^64-0.5
-            TestCase("bid32_to_uint64_int", 0, "0x391C25C2", 18446740000000000000, 0x00), // 2^64+0.5
-            TestCase("bid32_to_uint64_int", 0, "0x391C25C2", 18446740000000000000, 0x00), // 2^64-1
-            TestCase("bid32_to_uint64_int", 0, "0x391C25C2", 18446740000000000000, 0x00), // 2^64+1
             TestCase("bid32_to_uint64_int", 0, "0x391E8480", 9223372036854775808, 0x01), // 2e19
             TestCase("bid32_to_uint64_int", 0, "0x392625A0", 9223372036854775808, 0x01), // 2.5e19
             TestCase("bid32_to_uint64_int", 0, "0x398F4240", 9223372036854775808, 0x01), // 1e20
             TestCase("bid32_to_uint64_int", 0, "0x3A000002", 2000000000000000, 0x00), // 2e15
-            TestCase("bid32_to_uint64_int", 0, "0x3A000002", 2000000000000000, 0x00), // 2e15-0.5
-            TestCase("bid32_to_uint64_int", 0, "0x3A000002", 2000000000000000, 0x00), // 2e15+0.5
-            TestCase("bid32_to_uint64_int", 0, "0x3A000002", 2000000000000000, 0x00), // 2e15-1
-            TestCase("bid32_to_uint64_int", 0, "0x3A000002", 2000000000000000, 0x00), // 2e15+1
-            TestCase("bid32_to_uint64_int", 0, "0x3A000002", 2000000000000000, 0x00), // 2e15-1.5
-            TestCase("bid32_to_uint64_int", 0, "0x3A000002", 2000000000000000, 0x00), // 2e15+1.5
             TestCase("bid32_to_uint64_int", 0, "0x3B80000F", 15000000000000000000, 0x00), // 1.5e19
             TestCase("bid32_to_uint64_int", 0, "0x3B800019", 9223372036854775808, 0x01), // 2.5e19
             TestCase("bid32_to_uint64_int", 0, "0x3C000001", 10000000000000000000, 0x00), // 1e19
-            TestCase("bid32_to_uint64_int", 0, "0x3C000001", 10000000000000000000, 0x00), // 1e19+0.5
-            TestCase("bid32_to_uint64_int", 0, "0x3C000002", 9223372036854775808, 0x01), // 2e19
+            TestCase("bid32_to_uint64_int", 0, "0x3C000002", 9223372036854775808, 0x01), // 2e19        // 30
             TestCase("bid32_to_uint64_int", 0, "0x3C800001", 9223372036854775808, 0x01), // 1e20
             TestCase("bid32_to_uint64_int", 0, "0x6BD86F70", 0, 0x00), // 0.999
             TestCase("bid32_to_uint64_int", 0, "0x6CB89680", 0, 0x00),
             TestCase("bid32_to_uint64_int", 0, "0x6E2CBCCC", 9223372000000000000, 0x00), // 2^63
-            TestCase("bid32_to_uint64_int", 0, "0x6E2CBCCC", 9223372000000000000, 0x00), // 2^63-0.5
-            TestCase("bid32_to_uint64_int", 0, "0x6E2CBCCC", 9223372000000000000, 0x00), // 2^63+0.5
-            TestCase("bid32_to_uint64_int", 0, "0x6E2CBCCC", 9223372000000000000, 0x00), // 2^63-1
-            TestCase("bid32_to_uint64_int", 0, "0x6E2CBCCC", 9223372000000000000, 0x00), // 2^63+1
-            TestCase("bid32_to_uint64_int", 0, "0x6E2CBCCC", 9223372000000000000, 0x00), // 2^63-1.5
             TestCase("bid32_to_uint64_int", 0, "0x78000000", 9223372036854775808, 0x01),
             TestCase("bid32_to_uint64_int", 0, "0x7c000000", 9223372036854775808, 0x01),
             TestCase("bid32_to_uint64_int", 0, "0x7e000000", 9223372036854775808, 0x01),
-            TestCase("bid32_to_uint64_int", 0, "9.223372E+18", 9223372000000000000, 0x00)
+            TestCase("bid32_to_uint64_int", 0, "9.223372E+18", 9223372000000000000, 0x00)               // 38
        ]
         
         var testID = 1
@@ -1170,6 +1141,15 @@ final class MGDecimalTests: XCTestCase {
         
         func checkValues(_ test: TestCase, _ x: UInt64, _ s: Status, _ msg: String) {
             let pass1 = test.res == x
+            let pass2 = test.status == s
+            XCTAssert(pass1, "Expected: " + msg)
+            XCTAssert(pass2, "[\(test.status)] != [\(s)]")
+            let pf = pass1 && pass2 ? "passed" : "failed"
+            if verbose { print("Decimal32 test \(test.id)-\(testID) \(pf)") }
+        }
+        
+        func checkValues(_ test: TestCase, _ x: UInt128, _ s: Status, _ msg: String) {
+            let pass1 = test.reshi == x.hi && test.reslo == x.lo
             let pass2 = test.status == s
             XCTAssert(pass1, "Expected: " + msg)
             XCTAssert(pass2, "[\(test.status)] != [\(s)]")
@@ -1192,17 +1172,30 @@ final class MGDecimalTests: XCTestCase {
                     let d1 = Double(bitPattern: test.res)
                     let error = "\(d1) != \(t1)"
                     checkValues(test, t1.bitPattern, Decimal32.state, error)
+                case "bid32_to_int64_int":
+                    let t1 = Decimal32(stringLiteral: test.istr)
+                    let error = "\(test.res) != \(t1.int)"
+                    checkValues(test, UInt64(bitPattern: Int64(t1.int)), Decimal32.state, error)
                 case "bid32_to_uint64_int":
-                    let t1 = Decimal32(stringLiteral: test.istr).int
-                    let error = "\(test.res) != \(t1)"
-                    checkValues(test, UInt64(t1), Decimal32.state, error)
+                    let t1 = Decimal32(stringLiteral: test.istr)
+                    let error = "\(test.res) != \(t1.uint)"
+                    checkValues(test, UInt64(t1.uint), Decimal32.state, error)
                 case "bid32_negate":
                     var t1 = Decimal32(stringLiteral: test.istr); t1.negate()
                     let dtest = Decimal32(raw:UInt32(test.res))
                     let error = String(format: "0x%08X[\(dtest)] != 0x%08X[\(t1)]", test.res, t1.x)
                     checkValues(test, UInt64(t1.x), Decimal32.state, error)
-                case "bid32_to_bid128": break
-                case "bid32_to_bid64": break
+                case "bid32_to_bid128":
+                    let t1 = Decimal32(stringLiteral: test.istr)
+                    let b128 = t1.decimal128
+                    let d128 = Decimal128(raw: UInt128(upper: test.reshi, lower: test.reslo))
+                    let error = String(format: "0x%08X%08X[\(d128)] != 0x%08X%08X[\(b128)]", test.reshi, test.reslo, b128.x.hi, b128.x.lo)
+                    checkValues(test, b128.x, Decimal32.state, error)
+                case "bid32_to_bid64":
+                    let t1 = Decimal32(stringLiteral: test.istr)
+                    let b64 = t1.decimal64.x
+                    let error = "\(test.res) != \(b64)"
+                    checkValues(test, b64, Decimal32.state, error)
                 case "bid32_abs":
                     let t1 = Decimal32(stringLiteral: test.istr).magnitude
                     let state = Decimal32.state
@@ -1237,14 +1230,14 @@ final class MGDecimalTests: XCTestCase {
                     let t1 = Decimal32(stringLiteral: test.istr)
                     let t2 = Decimal32(stringLiteral: test.istr2)
                     let res: Decimal32
-                    if testID == 8 {
-                        print()
-                    }
                     if test.id.hasSuffix("add") {
                         res = t1 + t2
                     } else if test.id.hasSuffix("mul") {
                         res = t1 * t2
                     } else {
+                        if testID == 37 {
+                            print(t1, t2)
+                        }
                         res = t1 / t2
                     }
                     let dtest = Decimal32(raw:UInt32(test.res))

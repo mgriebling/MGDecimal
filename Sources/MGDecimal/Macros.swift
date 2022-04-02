@@ -170,19 +170,19 @@ func __unsigned_compare_gt_128(_ A:UInt128, _ B:UInt128) -> Bool {
 
 func unpack_bid64(_ x:UInt64, _ s: inout Int, _ e: inout Int, _ k: inout Int, _ c: inout UInt64, _ status: inout Status) -> Double? {
     s = Int(x >> 63)
-    if ((x & (3<<61)) == (3<<61)) {
-        if ((x & (0xF<<59)) == (0xF<<59)) {
-            if ((x & (0x1F<<58)) != (0x1F<<58)) { return return_double_inf(s) }
-            if ((x & (1<<57)) != 0) { status.insert(.invalidOperation) }
+    if ((x & (UInt64(3)<<61)) == (UInt64(3)<<61)) {
+        if ((x & (UInt64(0xF)<<59)) == (UInt64(0xF)<<59)) {
+            if ((x & (UInt64(0x1F)<<58)) != (UInt64(0x1F)<<58)) { return return_double_inf(s) }
+            if ((x & (UInt64(1)<<57)) != 0) { status.insert(.invalidOperation) }
             return return_double_nan(s,(((x & 0x3FFFFFFFFFFFF) > 999999999999999) ? 0 : (UInt64(x) << 14)), 0)
         }
-        e = Int((x >> 51) & ((1<<10)-1)) - 398
-        c = (1<<53) + (x & ((1<<51)-1))
+        e = Int((x >> 51) & ((UInt64(1)<<10)-1)) - 398
+        c = (UInt64(1)<<53) + (x & ((UInt64(1)<<51)-1))
         if c > 9999999999999999 { return return_double_zero(s) }
         k = 0
     } else {
-        e = Int((x >> 53) & ((1<<10)-1)) - 398
-        c = x & ((1<<53)-1)
+        e = Int((x >> 53) & ((UInt64(1)<<10)-1)) - 398
+        c = x & ((UInt64(1)<<53)-1)
         if c == 0 { return return_double_zero(s) }
         k = clz64(c) - 10
         c = c << k
@@ -192,10 +192,10 @@ func unpack_bid64(_ x:UInt64, _ s: inout Int, _ e: inout Int, _ k: inout Int, _ 
 
 func unpack_bid128(_ x:UInt128, _ s: inout Int, _ e: inout Int, _ k: inout Int, _ c: inout UInt128, _ status: inout Status) -> Double? {
     s = Int(x.hi >> 63)
-    if ((x.hi & (3<<61)) == (3<<61)) {
-        if ((x.hi & (0xF<<59)) == (0xF<<59)) {
-            if ((x.hi & (0x1F<<58)) != (0x1F<<58)) { return return_double_inf(s) }
-            if ((x.hi & (1<<57)) != 0) {
+    if ((x.hi & (UInt64(3)<<61)) == (UInt64(3)<<61)) {
+        if ((x.hi & (UInt64(0xF)<<59)) == (UInt64(0xF)<<59)) {
+            if ((x.hi & (UInt64(0x1F)<<58)) != (UInt64(0x1F)<<58)) { return return_double_inf(s) }
+            if ((x.hi & (UInt64(1)<<57)) != 0) {
                 status.insert(.invalidOperation)
             }
             if lt128(54210108624275,4089650035136921599, x.hi & 0x3FFFFFFFFFFF, x.lo) {
@@ -205,9 +205,9 @@ func unpack_bid128(_ x:UInt128, _ s: inout Int, _ e: inout Int, _ k: inout Int, 
         }
         return return_double_zero(s)
     } else {
-        e = Int((x.hi >> 49) & ((1<<14)-1)) - 6176;
-        c.hi = x.hi & ((1<<49)-1);
-        c.lo = x.lo;
+        e = Int((x.hi >> 49) & ((UInt64(1)<<14)-1)) - 6176;
+        c.hi = x.hi & ((UInt64(1)<<49)-1)
+        c.lo = x.lo
         if lt128(542101086242752,4003012203950112767,c.hi,c.lo) { c.hi = 0; c.lo = 0 }
         if (c.hi == 0) && (c.lo == 0) { return return_double_zero(s) }
         k = clz128_nz(c.hi,c.lo) - 15
@@ -228,7 +228,7 @@ func unpack_binary64(_ x:Double, _ s: inout Int, _ e: inout Int, _ c: inout UInt
         // denormalized number
         let l = clz64(c) - (64 - 53)
         c = c << l
-        e = -Int(l + 1074)
+        e = -(l + 1074)
         t = 0
         status.insert(.subnormal)
     } else if e == expMask {
@@ -250,7 +250,7 @@ func return_bid32_zero(_ s:Int) -> UInt32 { return_bid32(s,Decimal32.EXPONENT_BI
     return_bid32(s, 0x1F<<3, c_hi>>44 > 999_999 ? 0 : Int(c_hi>>44))
 }
 
-func return_bid64_max(_ s:Int) -> UInt64 { return_bid64(s,Decimal64.MAX_EXPON,Decimal64.MAX_NUMBER) }
+func return_bid64_max(_ s:Int) -> UInt64 { return_bid64(s,Decimal64.MAX_EXPON,Int(Decimal64.MAX_NUMBER)) }
 func return_bid64_zero(_ s:Int) -> UInt64 { return_bid64(s,Decimal64.EXPONENT_BIAS,0) }
 @inlinable func return_bid64_inf(_ s:Int) -> UInt64 { return_bid64(s,0xF<<6,0) }
 @inlinable func return_bid64_nan(_ s:Int, _ c_hi:UInt64, _ c_lo:UInt64) -> UInt64 {

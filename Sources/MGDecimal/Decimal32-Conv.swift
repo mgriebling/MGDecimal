@@ -592,7 +592,7 @@ extension Decimal32 {
         var coeff = coeff
         if coeff > MAX_NUMBER {
             expon += 1
-            coeff = 1000000
+            coeff = 1_000_000
         }
         return very_fast_get_BID32(sgn, expon, coeff)
     }
@@ -607,7 +607,7 @@ extension Decimal32 {
         
         if coeff > MAX_NUMBER {
             expon += 1
-            coeff = UInt32(MAX_NUMBERP1)
+            coeff =  1_000_000
         }
         
         // check for possible underflow/overflow
@@ -760,8 +760,8 @@ extension Decimal32 {
         var rmode = rmode
         
         if coeff > MAX_NUMBER {
-            expon+=1
-            coeff = 1000000
+            expon += 1
+            coeff = 1_000_000
         }
         // check for possible underflow/overflow
         if UInt32(bitPattern: Int32(expon)) > MAX_EXPON {
@@ -903,6 +903,180 @@ extension Decimal32 {
     }
     
     /*****************************************************************************
+     *  BID32_to_uint64_int
+     ****************************************************************************/
+    static func bid32_to_uint (_ x: UInt32, _ rmode:Rounding, _ pfpsc: inout Status) -> UInt {
+        //      BID_UINT32 x = *px;
+        //      BID_UINT64 res;
+        //      BID_UINT32 x_sign;
+        //      BID_UINT32 x_exp;
+        //      int exp; // unbiased exponent
+        //      // Note: C1 represents x_significand (BID_UINT32)
+        //      BID_UI32FLOAT tmp1;
+        //      unsigned int x_nr_bits;
+        //      int q, ind, shift;
+        //      BID_UINT32 C1;
+        //      BID_UINT128 C;
+        //      BID_UINT64 Cstar; // C* represents up to 16 decimal digits ~ 54 bits
+        //      BID_UINT128 P128;
+        
+        // check for NaN or Infinity
+        if ((x & MASK_NAN32) == MASK_NAN32 || (x & MASK_INF32) == MASK_INF32) {
+            // set invalid flag
+            pfpsc.insert(.invalidOperation)
+            
+            // return Integer Indefinite
+            return UInt(Decimal64.MASK_SIGN)
+        }
+        
+        // unpack x
+        let x_sign = x & MASK_SIGN32; // 0 for positive, MASK_SIGN32 for negative
+        
+        // if steering bits are 11 (condition will be 0), then exponent is G[0:w+1] =>
+        var x_exp, C1: UInt32
+        if ((x & MASK_STEERING_BITS32) == MASK_STEERING_BITS32) {
+            x_exp = (x & MASK_BINARY_EXPONENT2_32) >> 21; // biased
+            C1 = (x & MASK_BINARY_SIG2_32) | MASK_BINARY_OR2_32;
+            if (C1 > 9999999) { // non-canonical
+                x_exp = 0;
+                C1 = 0;
+            }
+        } else {
+            x_exp = (x & MASK_BINARY_EXPONENT1_32) >> 23; // biased
+            C1 = x & MASK_BINARY_SIG1_32;
+        }
+        
+        // check for zeros (possibly from non-canonical values)
+        if C1 == 0x0 {
+            // x is 0
+            return 0x0
+        }
+        // x is not special and is not zero
+        
+        // q = nr. of decimal digits in x (1 <= q <= 7)
+        //  determine first the nr. of bits in x
+        let tmp1 = Float(C1) // exact conversion
+        let x_nr_bits = 1 + Int((tmp1.bitPattern >> 23) & 0xff) - 0x7f
+        var q = Int(bid_nr_digits[x_nr_bits - 1].digits)
+        if q == 0 {
+            q = Int(bid_nr_digits[x_nr_bits - 1].digits1)
+            if C1 >= bid_nr_digits[x_nr_bits - 1].threshold_lo {
+                q+=1
+            }
+        }
+        let exp = Int(x_exp) - EXPONENT_BIAS // unbiased exponent
+        
+        if (q + exp) > 20 { // x >= 10^20 ~= 2^66.45... (cannot fit in 64 bits)
+            // set invalid flag
+            pfpsc.insert(.invalidOperation)
+            
+            // return Integer Indefinite
+            return UInt(Decimal64.MASK_SIGN)
+        } else if (q + exp) == 20 { // x = c(0)c(1)...c(q-1)00...0 (20 dec. digits)
+            // in this case 2^63.11... ~= 10^19 <= x < 10^20 ~= 2^66.43...
+            // so x rounded to an integer may or may not fit in an unsigned 64-bit int
+            // the cases that do not fit are identified here; the ones that fit
+            // fall through and will be handled with other cases further,
+            // under '1 <= q + exp <= 20'
+            if x_sign != 0 { // if n < 0 and q + exp = 20 then x is much less than -1
+                // set invalid flag
+                pfpsc.insert(.invalidOperation)
+                
+                // return Integer Indefinite
+                return UInt(Decimal64.MASK_SIGN)
+            } else { // if n > 0 and q + exp = 20
+                // if n >= 2^64 then n is too large
+                // <=> c(0)c(1)...c(q-1)00...0[20 dec. digits] >= 2^64
+                // <=> 0.c(0)c(1)...c(q-1) * 10^21 >= 5*(2^65)
+                // <=> C * 10^(21-q) >= 0xa0000000000000000, 1<=q<=7
+                var C = UInt128()
+                if q == 1 {
+                    // C * 10^20 >= 0xa0000000000000000
+                    __mul_128x64_to_128 (&C, UInt64(C1), bid_ten2k128[0]); // 10^20 * C
+                    if C.hi >= 0x0a {
+                        // actually C.w[1] == 0x0a && C.w[0] >= 0x0000000000000000ull) {
+                        // set invalid flag
+                        pfpsc.insert(.invalidOperation)
+                        
+                        // return Integer Indefinite
+                        return UInt(Decimal64.MASK_SIGN)
+                    }
+                    // else cases that can be rounded to a 64-bit int fall through
+                    // to '1 <= q + exp <= 20'
+                } else { // if (2 <= q <= 7) => 14 <= 21 - q <= 19
+                    // Note: C * 10^(21-q) has 20 or 21 digits; 0xa0000000000000000
+                    // has 21 digits
+                    __mul_64x64_to_128MACH(&C, UInt64(C1), bid_ten2k64[21 - q])
+                    if C.hi >= 0x0a {
+                        // actually C.w[1] == 0x0a && C.w[0] >= 0x0000000000000000ull) {
+                        // set invalid flag
+                        pfpsc.insert(.invalidOperation)
+                        
+                        // return Integer Indefinite
+                        return UInt(Decimal64.MASK_SIGN)
+                    }
+                    // else cases that can be rounded to a 64-bit int fall through
+                    // to '1 <= q + exp <= 20'
+                }
+            }
+        }
+        // n is not too large to be converted to int64 if -1 < n < 2^64
+        // Note: some of the cases tested for above fall through to this point
+        var res = UInt64()
+        if (q + exp) <= 0 { // n = +/-0.[0...0]c(0)c(1)...c(q-1)
+            // return 0
+            return 0x0
+        } else { // if (1 <= q + exp <= 20, 1 <= q <= 7, -6 <= exp <= 19)
+            // x <= -1 or 1 <= x < 2^64 so if positive x can be rounded
+            // to nearest to a 64-bit unsigned signed integer
+            if x_sign != 0 { // x <= -1
+                // set invalid flag
+                pfpsc.insert(.invalidOperation)
+                
+                // return Integer Indefinite
+                return UInt(Decimal64.MASK_SIGN)
+            }
+            // 1 <= x < 2^64 so x can be rounded
+            // to nearest to a 64-bit unsigned integer
+            if exp < 0 { // 2 <= q <= 7, -6 <= exp <= -1, 1 <= q + exp <= 6
+                let ind = -exp; // 1 <= ind <= 6; ind is a synonym for 'x'
+                // chop off ind digits from the lower part of C1
+                // C1 fits in 64 bits
+                // calculate C* and f*
+                // C* is actually floor(C*) in this case
+                // C* and f* need shifting and masking, as shown by
+                // bid_shiftright128[] and bid_maskhigh128[]
+                // 1 <= x <= 6
+                // kx = 10^(-x) = bid_ten2mk64[ind - 1]
+                // C* = C1 * 10^(-x)
+                // the approximation of 10^(-x) was rounded up to 54 bits
+                var P128 = UInt128()
+                __mul_64x64_to_128MACH(&P128, UInt64(C1), bid_ten2mk64[ind - 1])
+                var Cstar = P128.hi
+                
+                // the top Ex bits of 10^(-x) are T* = bid_ten2mk128trunc[ind].w[0], e.g.
+                // if x=1, T*=bid_ten2mk128trunc[0].w[0]=0x1999999999999999
+                // C* = floor(C*) (logical right shift; C has p decimal digits,
+                //     correct by Property 1)
+                // n = C* * 10^(e+x)
+                
+                // shift right C* by Ex-64 = bid_shiftright128[ind]
+                let shift = bid_shiftright128[ind - 1] // 0 <= shift <= 39
+                Cstar = Cstar >> shift
+                res = Cstar // the result is positive
+            } else if exp == 0 {
+                // 1 <= q <= 10
+                // res = +C (exact)
+                res = UInt64(C1) // the result is positive
+            } else { // if (exp > 0) => 1 <= exp <= 9, 1 <= q < 9, 2 <= q + exp <= 10
+                // res = +C * 10^exp (exact)
+                res = UInt64(C1) * bid_ten2k64[exp] // the result is positive
+            }
+        }
+        return UInt(res)
+    }
+    
+    /*****************************************************************************
      *  BID32_to_int64_int
      ****************************************************************************/
     static func bid32_to_int (_ x: UInt32, _ rmode:Rounding, _ pfpsc: inout Status) -> Int {
@@ -913,7 +1087,7 @@ extension Decimal32 {
             // set invalid flag
             pfpsc.insert(.invalidOperation)
             // return Integer Indefinite
-            return Int.max
+            return Int(bitPattern: UInt(Decimal64.MASK_SIGN))
         }
         // unpack x
         let x_sign = x & MASK_SIGN32; // 0 for positive, MASK_SIGN32 for negative
@@ -923,8 +1097,8 @@ extension Decimal32 {
             x_exp = (x & MASK_BINARY_EXPONENT2_32) >> 21 // biased
             C1 = (x & MASK_BINARY_SIG2_32) | MASK_BINARY_OR2_32
             if C1 > MAX_NUMBER { // non-canonical
-                x_exp = 0;
-                C1 = 0;
+                x_exp = 0
+                C1 = 0
             }
         } else {
             x_exp = (x & MASK_BINARY_EXPONENT1_32) >> 23 // biased
@@ -947,7 +1121,7 @@ extension Decimal32 {
             // set invalid flag
             pfpsc.insert(.invalidOperation)
             // return Integer Indefinite
-            return Int.max
+            return Int(bitPattern: UInt(Decimal64.MASK_SIGN))
         } else if (q + exp) == 19 { // x = c(0)c(1)...c(q-1)00...0 (19 dec. digits)
             // in this case 2^63.11... ~= 10^19 <= x < 10^20 ~= 2^66.43...
             // so x rounded to an integer may or may not fit in a signed 64-bit int
@@ -967,7 +1141,7 @@ extension Decimal32 {
                     // set invalid flag
                     pfpsc.insert(.invalidOperation)
                     // return Integer Indefinite
-                    return Int.max
+                    return Int(bitPattern: UInt(Decimal64.MASK_SIGN))
                 }
                 // else cases that can be rounded to a 64-bit int fall through
                 // to '1 <= q + exp <= 19'
@@ -985,7 +1159,7 @@ extension Decimal32 {
                     // set invalid flag
                     pfpsc.insert(.invalidOperation)
                     // return Integer Indefinite
-                    return Int.max
+                    return Int(bitPattern: UInt(Decimal64.MASK_SIGN))
                 }
                 // else cases that can be rounded to a 64-bit int fall through
                 // to '1 <= q + exp <= 19'

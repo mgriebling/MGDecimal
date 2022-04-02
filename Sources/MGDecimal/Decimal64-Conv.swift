@@ -47,7 +47,8 @@ extension Decimal64 {
     static let expmax16              =   369 // max unbiased exponent
     static let expmin7               =  -101 // min unbiased exponent
     static let expmax7               =    90 // max unbiased exponent
-    static let MAX_NUMBER            = 9_999_999_999_999_999
+    static let MAX_NUMBER            = UInt64(9_999_999_999_999_999)
+    static let MAX_NUMBERP1          = MAX_NUMBER+1
     
     ////////////////////////////////////////
     // Constant Definitions
@@ -128,7 +129,7 @@ extension Decimal64 {
     /*
      * Takes a BID32 as input and converts it to a BID64 and returns it.
      */
-    static func BID32_to_BID64 (_ x: UInt32, _ pfpsf: inout Status) -> UInt64 {
+    static func bid32_to_bid64 (_ x: UInt32, _ pfpsf: inout Status) -> UInt64 {
         var sign_x = UInt32(0), coefficient_x = UInt32(0), exponent_x = 0
         var res: UInt64
         if !Decimal32.unpack_BID32(&sign_x, &exponent_x, &coefficient_x, x) {
@@ -194,8 +195,6 @@ extension Decimal64 {
      * Takes a BID64 as input and converts it to a BID32 and returns it.
      */
     static func bid64_to_bid32(_ x: UInt64, _ rmode: Rounding, _ pfpsf: inout Status) -> UInt32 {
-        // BID_OPT_SAVE_BINARY_FLAGS()
-        
         // unpack arguments, check for NaN or Infinity, 0
         var sign_x = UInt64(0), coefficient_x = UInt64(0), exponent_x = 0
         var res: UInt32
@@ -206,7 +205,6 @@ extension Decimal64 {
                 res |= UInt32(coefficient_x >> 32) & Decimal32.SSNAN_MASK32
                 if (x & SNAN_MASK64) == SNAN_MASK64 {    // sNaN
                     pfpsf.insert(.invalidOperation)
-                    // __set_status_flags (pfpsf, BID_INVALID_EXCEPTION);
                 }
                 return res
             }
@@ -372,7 +370,7 @@ extension Decimal64 {
                     switch (rmode) {
                         case BID_ROUNDING_TO_NEAREST, BID_ROUNDING_TIES_AWAY:
                             // test whether fractional part is 0
-                            if (remainder_h == 0x8000000000000000
+                            if (remainder_h == MASK_SIGN
                                 && (Q_low.hi < bid_reciprocals10_128[extra_digits].hi
                                     || (Q_low.hi == bid_reciprocals10_128[extra_digits].hi
                                         && Q_low.lo <
@@ -445,7 +443,7 @@ extension Decimal64 {
         // special format
         
         // eliminate the case coeff==10^16 after rounding
-        if coeff == 10000000000000000 {
+        if coeff == MAX_NUMBERP1 {
             r = UInt64(expon + 1)
             r <<= EXPONENT_SHIFT_SMALL64
             r |= 1000000000000000 | sgn
@@ -536,7 +534,7 @@ extension Decimal64 {
             switch (rmode) {
                 case BID_ROUNDING_TO_NEAREST, BID_ROUNDING_TIES_AWAY:
                     // test whether fractional part is 0
-                    if (remainder_h == 0x8000000000000000
+                    if (remainder_h == MASK_SIGN
                         && (Q_low.hi < bid_reciprocals10_128[extra_digits].hi
                             || (Q_low.hi == bid_reciprocals10_128[extra_digits].hi
                                 && Q_low.lo < bid_reciprocals10_128[extra_digits].lo))) {
@@ -575,7 +573,7 @@ extension Decimal64 {
         var coeff = coeff
         var r:UInt64
         if UInt(expon) >= 3 * 256 - 1 {
-            if (expon == 3 * 256 - 1) && coeff == 10000000000000000 {
+            if (expon == 3 * 256 - 1) && coeff == MAX_NUMBERP1 {
                 expon = 3 * 256;
                 coeff = 1000000000000000;
             }
@@ -621,7 +619,7 @@ extension Decimal64 {
         // special format
         
         // eliminate the case coeff==10^16 after rounding
-        if coeff == 10000000000000000 {
+        if coeff == MAX_NUMBERP1 {
             r = UInt64(expon + 1)
             r <<= EXPONENT_SHIFT_SMALL64
             r |= 1000000000000000 | sgn
@@ -690,7 +688,7 @@ extension Decimal64 {
             cint.hi = c.hi; cint.lo = c.lo
             if (a <= 0) {
                 cint = srl128 (cint.hi, cint.lo, 8 - e);
-                if ((cint.hi == 0) && (cint.lo < 10000000000000000)) {
+                if ((cint.hi == 0) && (cint.lo < MAX_NUMBERP1)) {
                     return return_bid64 (s, 398, Int(cint.lo))
                 }
             } else if (a <= 48) {
@@ -736,7 +734,7 @@ extension Decimal64 {
         let rindex = roundboundIndex(rmode, s != 0, c_prov)
         if lt128(bid_roundbound_128[rindex].hi, bid_roundbound_128[rindex].lo, z.w[4], z.w[3]) {
             c_prov = c_prov + 1
-            if c_prov == 10000000000000000 {
+            if c_prov == MAX_NUMBERP1 {
                 c_prov = 1000000000000000
                 e_out = e_out + 1
             }
@@ -768,7 +766,7 @@ extension Decimal64 {
             }
         } else {    // |C| >= 10^16 and the result may be inexact
             // the smallest |C| is 10^16 which has 17 decimal digits
-            // the largest |C| is 0x8000000000000000 = 9223372036854775808 w/ 19 digits
+            // the largest |C| is MASK_SIGN = 9223372036854775808 w/ 19 digits
             if C < 0x16345785d8a0000 {    // x < 10^17
                 q = 17
                 ind = 1    // number of digits to remove for q = 17
@@ -860,7 +858,7 @@ extension Decimal64 {
         var res = UInt64(), exp = UInt64(), nanb = UInt64()
         
         //printf("arg bid "BID_FMT_LLX16" \n", ba);
-        let sign = ba & 0x8000000000000000
+        let sign = ba & MASK_SIGN
         let comb = (ba & 0x7ffc000000000000) >> 50
         var trailing = ba & 0x0003ffffffffffff
         var bcoeff = UInt64()
@@ -887,7 +885,7 @@ extension Decimal64 {
             }
             
             // Zero the coefficient if it is non-canonical (>= 10^16)
-            if bcoeff >= 10000000000000000 {
+            if bcoeff >= MAX_NUMBERP1 {
                 bcoeff = 0
             }
         }
@@ -931,7 +929,7 @@ extension Decimal64 {
     
     static func dpd_to_bid64 (_ da:UInt64) -> UInt64 {
         var res = UInt64(), nanb = UInt64(), d0 = UInt64(), exp = UInt64()
-        let sign = da & 0x8000000000000000
+        let sign = da & MASK_SIGN
         let comb = (da & 0x7ffc000000000000) >> 50
         let trailing = da & 0x0003ffffffffffff
         

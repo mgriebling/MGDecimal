@@ -124,7 +124,7 @@ public struct Decimal32 : CustomStringConvertible, ExpressibleByStringLiteral, E
 extension Decimal32 : AdditiveArithmetic, Comparable, SignedNumeric, Strideable, FloatingPoint {
     
     public mutating func round(_ rule: FloatingPointRoundingRule) {
-        let dec64 = Decimal64.BID32_to_BID64(x, &Decimal32.state)
+        let dec64 = Decimal64.bid32_to_bid64(x, &Decimal32.state)
         let res = Decimal64.bid64_round_integral_exact(dec64, rule, &Decimal32.state)
         x = Decimal64.bid64_to_bid32(res, rule, &Decimal32.state)
     }
@@ -170,7 +170,6 @@ extension Decimal32 : AdditiveArithmetic, Comparable, SignedNumeric, Strideable,
     
     public static func /= (lhs: inout Decimal32, rhs: Decimal32) { lhs = lhs / rhs }
     public static func *= (lhs: inout Decimal32, rhs: Decimal32) { lhs = lhs * rhs }
-    public static prefix func - (lhs: Decimal32) -> Decimal32 { Decimal32(raw: lhs.x ^ Decimal32.SIGN_MASK32) }
     public static func - (lhs: Decimal32, rhs: Decimal32) -> Decimal32 { lhs + (-rhs) }
     
 }
@@ -181,10 +180,16 @@ public extension Decimal32 {
     // MARK: - Numeric State variables
     var sign: FloatingPointSign { x & Decimal32.SIGN_MASK32 != 0 ? .minus : .plus }
     var magnitude: Decimal32    { Decimal32(raw: x & ~Decimal32.SIGN_MASK32) }
-    var decimal64: Decimal64    { Decimal64(raw: Decimal64.BID32_to_BID64(x, &Decimal32.state)) }
+    var decimal64: Decimal64    { Decimal64(raw: Decimal64.bid32_to_bid64(x, &Decimal32.state)) }
+    var decimal128: Decimal128  { Decimal128(raw: Decimal128.bid32_to_bid128(x, &Decimal32.state)) }
     var dpd32: UInt32           { Decimal32.bid_to_dpd32(x) }
     var int: Int                { Decimal32.bid32_to_int(x, Decimal32.rounding, &Decimal32.state) }
+    var uint: UInt              { Decimal32.bid32_to_uint(x, Decimal32.rounding, &Decimal32.state) }
     var double: Double          { Decimal32.bid32_to_double(x, Decimal32.rounding, &Decimal32.state) }
+    
+    mutating func negate() {
+        self.x = x ^ Decimal32.SIGN_MASK32
+    }
     
     private func unpack () -> (sign: UInt32, exponent: Int, significand: UInt32)? {
         var s : (sign: UInt32, exponent: Int, significand: UInt32) = (UInt32(0), 0, UInt32(0))

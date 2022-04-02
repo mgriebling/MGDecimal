@@ -63,7 +63,11 @@ public struct Decimal64 : ExpressibleByStringLiteral, ExpressibleByFloatLiteral,
     }
     
     public init(decimal32: Decimal32) {
-        x = Decimal64.BID32_to_BID64(decimal32.x, &Decimal64.state)
+        x = Decimal64.bid32_to_bid64(decimal32.x, &Decimal64.state)
+    }
+    
+    public init(decimal128: Decimal128) {
+        x = Decimal128.bid128_to_bid64(decimal128.x, Decimal64.rounding, &Decimal64.state)
     }
     
     public init(_ value: Decimal128) { x = Decimal128.bid128_to_bid64(value.x, Decimal64.rounding, &Decimal64.state) }
@@ -80,6 +84,7 @@ public extension Decimal64 {
     var sign: FloatingPointSign { x & Decimal64.SIGN_MASK64 != 0 ? .minus : .plus }
     var magnitude: Decimal64    { Decimal64(raw: x & ~Decimal64.SIGN_MASK64) }
     var decimal32: Decimal32    { Decimal32(raw: Decimal64.bid64_to_bid32(x, Decimal64.rounding, &Decimal64.state)) }
+    var decimal128: Decimal128  { Decimal128(raw: Decimal64.bid64_to_bid128(x, &Decimal64.state)) }
     var dpd64: UInt64           { Decimal64.bid_to_dpd64(x) }
     var int: Int                { Decimal64.bid64_to_int(x, &Decimal64.state) }
     var double: Double          { Decimal64.bid64_to_double(x, Decimal64.rounding, &Decimal64.state) }

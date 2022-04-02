@@ -9,6 +9,30 @@ import Foundation
 
 // tables used in computation
 
+// bid_ten2k128[i - 20] = 10^i, 20 <= i <= 38
+let bid_ten2k128: [UInt128] = [    // the 64-bit word order is L, H
+  UInt128(w: [0x6bc75e2d63100000, 0x0000000000000005]),    // 10^20
+  UInt128(w: [0x35c9adc5dea00000, 0x0000000000000036]),    // 10^21
+  UInt128(w: [0x19e0c9bab2400000, 0x000000000000021e]),    // 10^22
+  UInt128(w: [0x02c7e14af6800000, 0x000000000000152d]),    // 10^23
+  UInt128(w: [0x1bcecceda1000000, 0x000000000000d3c2]),    // 10^24
+  UInt128(w: [0x161401484a000000, 0x0000000000084595]),    // 10^25
+  UInt128(w: [0xdcc80cd2e4000000, 0x000000000052b7d2]),    // 10^26
+  UInt128(w: [0x9fd0803ce8000000, 0x00000000033b2e3c]),    // 10^27
+  UInt128(w: [0x3e25026110000000, 0x00000000204fce5e]),    // 10^28
+  UInt128(w: [0x6d7217caa0000000, 0x00000001431e0fae]),    // 10^29
+  UInt128(w: [0x4674edea40000000, 0x0000000c9f2c9cd0]),    // 10^30
+  UInt128(w: [0xc0914b2680000000, 0x0000007e37be2022]),    // 10^31
+  UInt128(w: [0x85acef8100000000, 0x000004ee2d6d415b]),    // 10^32
+  UInt128(w: [0x38c15b0a00000000, 0x0000314dc6448d93]),    // 10^33
+  UInt128(w: [0x378d8e6400000000, 0x0001ed09bead87c0]),    // 10^34
+  UInt128(w: [0x2b878fe800000000, 0x0013426172c74d82]),    // 10^35
+  UInt128(w: [0xb34b9f1000000000, 0x00c097ce7bc90715]),    // 10^36
+  UInt128(w: [0x00f436a000000000, 0x0785ee10d5da46d9]),    // 10^37
+  UInt128(w: [0x098a224000000000, 0x4b3b4ca85a86c47a])     // 10^38 (39 digits)
+]
+
+
 // These are the different, bipartite, tables for conversion to bid128
 // Using the same approach, the tables become extremely large
 // And things are more amenable here since there's never overflow/underflow

@@ -658,9 +658,9 @@ extension Decimal32 {
         }
         
         var rmode1 = roundboundIndex(rmode, (sign_x^sign_y) != 0, 0)
-//        if (sign_x ^ sign_y) != 0 && UInt32(rmode1 - 1) < 2 {
-//            rmode1 = 3 - rmode1
-//        }
+        if (sign_x ^ sign_y) != 0 && UInt32(rmode1 - 1) < 2 {
+            rmode1 = 3 - rmode1
+        }
         
         if exponent_x < 0 { rmode1 = 3 }  // RZ
         
@@ -684,7 +684,6 @@ extension Decimal32 {
         }
         
         // __set_status_flags (pfpsf, status);
-        
         if rmode1 == 0 {    //BID_ROUNDING_TO_NEAREST
             if R==0 {
                 Q &= 0xffff_fffe
@@ -693,9 +692,9 @@ extension Decimal32 {
         
         if (exponent_x == -1) && (Q == MAX_NUMBER) && (rmode != BID_ROUNDING_TO_ZERO) {
             rmode1 = roundboundIndex(rmode, (sign_x^sign_y) != 0, 0)
-//            if ((sign_x^sign_y != 0) && UInt32(rmode1 - 1) < 2) {
-//                rmode1 = 3 - rmode1
-//            }
+            if ((sign_x^sign_y != 0) && UInt32(rmode1 - 1) < 2) {
+                rmode1 = 3 - rmode1
+            }
             
             if ((R != 0) && (rmode == BID_ROUNDING_UP)) || ((rmode1&3 == 0) && (R+R>=bid_power10_table_128[extra_digits].lo)) {
                 return very_fast_get_BID32(sign_x^sign_y, 0, 1000000)
@@ -881,8 +880,8 @@ extension Decimal32 {
             // eliminate trailing zeros
             // check whether CX, CY are short
             if (coefficient_x <= 1024) && (coefficient_y <= 1024) {
-                let i = Int(coefficient_y) - 1;
-                let j = Int(coefficient_x) - 1;
+                let i = Int(coefficient_y) - 1
+                let j = Int(coefficient_x) - 1
                 // difference in powers of 2 bid_factors for Y and X
                 var nzeros = ed2 - Int(bid_factors[i][0] + bid_factors[j][0])
                 // difference in powers of 5 bid_factors
@@ -916,19 +915,18 @@ extension Decimal32 {
                 }
                 
                 if (digit_h & 1) == 0 {
-                    nzeros += Int(3 & UInt32(bid_packed_10000_zeros[Int(digit_h >> 3)] >> digit_h & 7))
+                    nzeros += Int(3 & UInt32(bid_packed_10000_zeros[Int(digit_h >> 3)] >> (digit_h & 7)))
                 }
                 
                 if nzeros != 0 {
-                    var CT = UInt64(Q) * bid_bid_reciprocals10_32[nzeros];
+                    var CT = UInt64(Q) * bid_bid_reciprocals10_32[nzeros]
                     CT >>= 32
                     
                     // now get P/10^extra_digits: shift C64 right by M[extra_digits]-128
-                    let amount = bid_bid_bid_recip_scale32[nzeros];
-                    Q = UInt32(CT >> amount);
+                    let amount = bid_bid_bid_recip_scale32[nzeros]
+                    Q = UInt32(CT >> amount)
                 }
                 diff_expon += nzeros
-                
             }
             if diff_expon >= 0 {
                 return get_BID32 (sign_x ^ sign_y, diff_expon, Q, rmode, &status)
@@ -955,7 +953,7 @@ extension Decimal32 {
                     Q += D
                 case 1, 3:
                     break
-                default:    // rounding up
+                default:    // rounding up (2)
                     Q+=1
             }
             return get_BID32 (sign_x ^ sign_y, diff_expon, Q, rmode, &status)
@@ -965,7 +963,6 @@ extension Decimal32 {
                 // set status flags
                 status.insert(.inexact)
             }
-            //rmode = rnd_mode;
             return get_BID32_UF (sign_x ^ sign_y, diff_expon, UInt64(Q), Int(R), rmode, &status)
         }
     }
@@ -1665,9 +1662,7 @@ extension Decimal32 {
         }
         
         return very_fast_get_BID32 (sign_x, exponent_y, coefficient_x)
-    }
-
-    
+    }  
     
 }
 
