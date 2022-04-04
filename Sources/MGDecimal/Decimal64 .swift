@@ -7,8 +7,8 @@
 
 import Foundation
 
-public struct Decimal64 : ExpressibleByStringLiteral, ExpressibleByFloatLiteral, CustomStringConvertible,
-                          ExpressibleByIntegerLiteral {
+public struct Decimal64 : CustomStringConvertible, ExpressibleByStringLiteral, ExpressibleByIntegerLiteral,
+                          ExpressibleByFloatLiteral, Codable, Hashable {
 
     private static var enableStateOutput = false   // set to true to monitor variable state (i.e., invalid operations, etc.)
     
@@ -51,7 +51,12 @@ public struct Decimal64 : ExpressibleByStringLiteral, ExpressibleByFloatLiteral,
     public init(dpd64: UInt64) { x = Decimal64.dpd_to_bid64(dpd64) }
     
     public init(stringLiteral value: String) {
-        x = Decimal64.bid64_from_string(value, Decimal64.rounding, &Decimal64.state)
+        if value.hasPrefix("0x") {
+            var s = value; s.removeFirst(2)
+            x = UInt64(s, radix: 16) ?? 0
+        } else {
+            x = Decimal64.bid64_from_string(value, Decimal64.rounding, &Decimal64.state)
+        }
     }
     
     public init(floatLiteral value: Double) {
@@ -73,8 +78,122 @@ public struct Decimal64 : ExpressibleByStringLiteral, ExpressibleByFloatLiteral,
     public init(_ value: Decimal128) { x = Decimal128.bid128_to_bid64(value.x, Decimal64.rounding, &Decimal64.state) }
     public init(_ value: Decimal32) { x = Decimal32.bid32_to_bid64(value.x, &Decimal64.state) }
     
+    public init(_ value: Int = 0) { self.init(integerLiteral: value) }
+    public init<Source>(_ value: Source) where Source : BinaryInteger { self.init(Int(value)) }
+    
+    public init?<T>(exactly source: T) where T : BinaryInteger {
+        self.init(Int(source))  // FIX ME
+    }
+    
+    public init(sign: FloatingPointSign, exponent: Int, significand: Decimal64) {
+        let sgn = sign == .minus ? Decimal64.MASK_SIGN : 0
+        var s : (sign: UInt64, exponent: Int, significand: UInt64) = (UInt64(0), 0, UInt64(0))
+        self.init()
+        if Decimal64.unpack_BID64(&s.sign, &s.exponent, &s.significand, significand.x) {
+            x = Decimal64.get_BID64(sgn, exponent, s.significand, Decimal64.rounding, &Decimal64.state)
+        }
+    }
+    
+    public init(signOf: Decimal64, magnitudeOf: Decimal64) {
+        let sign = signOf.isSignMinus
+        self = sign ? -magnitudeOf.magnitude : magnitudeOf.magnitude
+    }
+    
+    public init(sign: FloatingPointSign, exponentBitPattern: UInt, significandDigits: [UInt8]) {
+        self.init()  /* TBD */
+    }
+    
     public var description: String { Decimal64.bid64_to_string(x) }
 
+}
+
+extension Decimal64 : AdditiveArithmetic, Comparable, SignedNumeric, Strideable, FloatingPoint {
+
+    public func isTotallyOrdered(belowOrEqualTo other: Decimal64) -> Bool { true
+        /* TBD */
+    }
+
+    public mutating func negate() { x ^= Decimal64.SIGN_MASK64 }
+    
+    public mutating func round(_ rule: FloatingPointRoundingRule) {
+        x = Decimal64.bid64_round_integral_exact(x, rule, &Decimal64.state)
+    }
+    
+    public mutating func formRemainder(dividingBy other: Decimal64) {
+        x = Decimal64.bid64_rem(self.x, other.x, &Decimal32.state)
+    }
+    
+    public mutating func formTruncatingRemainder(dividingBy other: Decimal64) {
+        let q = (self/other).rounded(.towardZero)
+        self -= q * other
+    }
+    
+    public mutating func formSquareRoot() { x = Decimal64.sqrt(x, Decimal64.rounding, &Decimal64.state) }
+    public mutating func addProduct(_ lhs: Decimal64, _ rhs: Decimal64) {
+        x = Decimal64.bid64_fma(lhs.x, rhs.x, self.x, Decimal64.rounding, &Decimal64.state)
+    }
+
+    public func distance(to other: Decimal64) -> Decimal64 { other - self }
+    public func advanced(by n: Decimal64) -> Decimal64 { self + n }
+    
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // MARK: - Basic arithmetic operations
+    
+    public func isEqual(to other: Decimal64) -> Bool { Decimal64.equal(self.x, other.x, &Decimal64.state) }
+    public func isLess(than other: Decimal64) -> Bool { Decimal64.lessThan(self.x, other.x, &Decimal64.state) }
+    public func isLessThanOrEqualTo(_ other: Decimal64) -> Bool { self < other || self == other }
+    public static func == (lhs: Decimal64, rhs: Decimal64) -> Bool { lhs.isEqual(to: rhs) }
+    public static func < (lhs: Decimal64, rhs: Decimal64) -> Bool { lhs.isLess(than: rhs) }
+    
+    public static func + (lhs: Decimal64, rhs: Decimal64) -> Decimal64 {
+        Decimal64(raw: Decimal64.add(lhs.x, rhs.x, Decimal64.rounding, &Decimal64.state))
+    }
+    
+    public static func / (lhs: Decimal64, rhs: Decimal64) -> Decimal64 {
+        Decimal64(raw: Decimal64.div(lhs.x, rhs.x, Decimal64.rounding, &Decimal64.state))
+    }
+    
+    public static func * (lhs: Decimal64, rhs: Decimal64) -> Decimal64 {
+        Decimal64(raw: Decimal64.mul(lhs.x, rhs.x, Decimal64.rounding, &Decimal64.state))
+    }
+    
+    public static func /= (lhs: inout Decimal64, rhs: Decimal64) { lhs = lhs / rhs }
+    public static func *= (lhs: inout Decimal64, rhs: Decimal64) { lhs = lhs * rhs }
+    public static func - (lhs: Decimal64, rhs: Decimal64) -> Decimal64 { lhs + (-rhs) }
+    
+}
+
+extension Decimal64 : DecimalFloatingPoint {
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // MARK: - DecimalFloatingPoint-required State variables
+    
+    public typealias RawExponent = UInt
+    
+    public static var exponentMaximum: Int          { MAX_EXPON }
+    public static var exponentBias: Int             { EXPONENT_BIAS }
+    public static var significandMaxDigitCount: Int { MAX_DIGITS }
+    
+    public var significandDigitCount: Int {
+//        guard let x = unpack() else { return -1 }
+        return 0 /* Decimal64.digitsIn(x.significand) */
+    }
+    
+    public var exponentBitPattern: UInt { 0 /* TBD */
+//        let x = unpack()
+//        return UInt64(x?.exponent ?? 0)
+    }
+    
+    public var significandDigits: [UInt8] {
+        guard let x = unpack() else { return [] }
+        return Array(String(x.significand)).map { UInt8($0.wholeNumberValue!) }
+    }
+    
+    public var decade: Decimal64 { self /* TBD */
+//        var res = UInt64(), exp = 0
+//        Decimal64.frexp(x, &res, &exp)
+//        return Decimal64(raw: return_bid64(0, exp+Decimal64.exponentBias, 1))
+    }
 }
 
 public extension Decimal64 {
@@ -194,8 +313,8 @@ public extension Decimal64 {
     var isSubnormal: Bool    { _isSubnormal }
     var isCanonical: Bool    { _isCanonical }
     var isBIDFormat: Bool    { true }
-//    var ulp: Decimal64       { nextUp - self }
-//    var nextUp: Decimal64    { Decimal64(raw: Decimal64.bid32_nextup(x, &Decimal64.state)) }
+    var ulp: Decimal64       { nextUp - self }
+    var nextUp: Decimal64    { /* Decimal64(raw: Decimal64.bid64_nextup(x, &Decimal64.state))*/ self }
     
 }
 

@@ -15,12 +15,15 @@ extension Decimal128 {
     static let MAX_EXPON                 = 12287
     static let EXPONENT_BIAS             = 6176
     static let MAX_FORMAT_DIGITS_128     = 34
+    static let P34                       = MAX_FORMAT_DIGITS_128
     static let MAX_STRING_DIGITS_128     = 100
     static let MAX_SEARCH                = MAX_STRING_DIGITS_128-MAX_FORMAT_DIGITS_128-1
     
     ////////////////////////////////////////
     // Constant Definitions
     ///////////////////////////////////////
+    static let EXP_P1                   = UInt64(0x0002_0000_0000_0000)
+    static let EXP_MAX_P1               = UInt64(0x6000_0000_0000_0000)
     static let SMALL_COEFF_MASK128      = UInt64(0x0001_ffff_ffff_ffff)
     static let LARGE_COEFF_MASK128      = UInt64(0x0000_7fff_ffff_ffff)
     static let EXPONENT_MASK128         = 0x3fff
@@ -283,10 +286,6 @@ extension Decimal128 {
     //   Macro for handling BID128 underflow
     //
     static func handle_UF_128 (_ sgn:UInt64, _ expon:Int, _ CQ:UInt128, _ prounding_mode:Rounding, _ fpsc: inout Status) -> UInt128 {
-        //      BID_UINT128 T128, TP128, Qh, Ql, Qh1, Stemp, Tmp, Tmp1;
-        //      BID_UINT64 carry, CY;
-        //      int ed2, amount;
-        //      unsigned rmode, status;
         var pres = UInt128()
         var expon = expon
         var CQ = CQ
@@ -748,160 +747,7 @@ extension Decimal128 {
         return pres
     }
     
-//    /*
-//     * Takes a BID128 as input and converts it to a BID32 and returns it.
-//     */
-//    static func bid128_to_bid32(_ x:UInt128, _ rnd_mode:Rounding, _ pfpsf: inout Status) -> UInt32 {
-//        var x = x, res = UInt32()
-//        BID_SWAP128(&x)
-//        
-//        // unpack arguments, check for NaN or Infinity or 0
-//        var sign_x = UInt64(), exponent_x = 0, CX = UInt128(), Tmp = UInt128(), Tmp1 = UInt128()
-//        var TP128 = UInt128(), Qh = UInt128(), Ql = UInt128(), Qh1 = UInt128()
-//        var uf_check = false
-//        if !unpack_BID128_value (&sign_x, &exponent_x, &CX, x) {
-//            if ((x.hi) & 0x7800000000000000) == 0x7800000000000000 {
-//                Tmp.hi = CX.hi & 0x00003fffffffffff
-//                Tmp.lo = CX.lo
-//                TP128 = bid_reciprocals10_128[27]
-//                __mul_128x128_full(&Qh, &Ql, Tmp, TP128)
-//                let amount = bid_recip_scale[27] - 64
-//                res = UInt32(((CX.hi >> 32) & 0xfc000000) | (Qh.hi >> amount))
-//                if (x.hi & Decimal64.SNAN_MASK64) == Decimal64.SNAN_MASK64 {   // sNaN
-//                    pfpsf.insert(.invalidOperation)
-//                }
-//                return res
-//            }
-//            // x is 0
-//            exponent_x = exponent_x - DECIMAL_EXPONENT_BIAS_128 + Decimal32.EXPONENT_BIAS
-//            if exponent_x < 0 {
-//                exponent_x = 0
-//            }
-//            if exponent_x > Decimal32.MAX_EXPON { // DECIMAL_MAX_EXPON_32) {
-//                exponent_x = Decimal32.MAX_EXPON
-//            }
-//            return UInt32(sign_x >> 32) | UInt32(exponent_x << 23)
-//        }
-//        
-//        if (CX.hi != 0 || (CX.lo >= 10000000)) {
-//            // find number of digits in coefficient
-//            // 2^64
-//            let f64 = Float(bitPattern: 0x5f800000)
-//            // fx ~ CX
-//            let fx = Float(CX.hi) * f64 + Float(CX.lo)
-//            let bin_expon_cx = Int((fx.bitPattern >> 23) & 0xff) - 0x7f
-//            var extra_digits = Int(bid_estimate_decimal_digits[bin_expon_cx]) - 7
-//            // scale = 38-estimate_decimal_digits[bin_expon_cx];
-//            let D = CX.hi - bid_power10_index_binexp_128[bin_expon_cx].hi
-//            if (D > 0 || (D == 0 && CX.lo >= bid_power10_index_binexp_128[bin_expon_cx].lo)) {
-//                extra_digits+=1
-//            }
-//            
-//            exponent_x += extra_digits;
-//            
-//            var rmode = roundboundIndex(rnd_mode) >> 2
-//            var carry = UInt64()
-//            if (sign_x != 0 && UInt(rmode - 1) < 2) {
-//                rmode = 3 - rmode;
-//            }
-//            if (exponent_x < DECIMAL_EXPONENT_BIAS_128 - Decimal32.EXPONENT_BIAS) {
-//                uf_check = true
-//                if -extra_digits + exponent_x - DECIMAL_EXPONENT_BIAS_128 + Decimal32.EXPONENT_BIAS + 35 >= 0 {
-//                    if exponent_x == DECIMAL_EXPONENT_BIAS_128 - Decimal32.EXPONENT_BIAS - 1 {
-//                        let T128 = bid_round_const_table_128[rmode][extra_digits]
-//                        var CX1 = UInt128()
-//                        __add_carry_out(&CX1.lo, &carry, T128.lo, CX.lo);
-//                        CX1.hi = CX.hi + T128.hi + carry;
-//                        if (__unsigned_compare_ge_128(CX1, bid_power10_table_128[extra_digits + 7])) {
-//                            uf_check = false
-//                        }
-//                    }
-//                    extra_digits = extra_digits + DECIMAL_EXPONENT_BIAS_128 - Decimal32.EXPONENT_BIAS - exponent_x;
-//                    exponent_x = DECIMAL_EXPONENT_BIAS_128 - Decimal32.EXPONENT_BIAS
-//                } else {
-//                    rmode = roundboundIndex(BID_ROUNDING_TO_ZERO) >> 2
-//                }
-//            }
-//            
-//            let T128 = bid_round_const_table_128[rmode][extra_digits]
-//            __add_carry_out(&CX.lo, &carry, T128.lo, CX.lo)
-//            CX.hi = CX.hi + T128.hi + carry
-//            
-//            TP128 = bid_reciprocals10_128[extra_digits]
-//            __mul_128x128_full(&Qh, &Ql, CX, TP128)
-//            let amount = bid_recip_scale[extra_digits]
-//            
-//            if (amount >= 64) {
-//                CX.lo = Qh.hi >> (amount - 64)
-//                CX.hi = 0
-//            } else {
-//                __shr_128(&CX, &Qh, amount)
-//            }
-//            
-//            if rnd_mode != BID_ROUNDING_TO_NEAREST {
-//                if (CX.lo & 1) != 0 {
-//                    // check whether fractional part of initial_P/10^ed1 is exactly .5
-//                    
-//                    // get remainder
-//                    __shl_128_long(&Qh1, Qh, (128 - amount));
-//                    
-//                    if (Qh1.hi == 0 && Qh1.lo == 0 &&
-//                        (Ql.hi < bid_reciprocals10_128[extra_digits].hi ||
-//                         (Ql.hi == bid_reciprocals10_128[extra_digits].hi &&
-//                          Ql.lo < bid_reciprocals10_128[extra_digits].lo))) {
-//                        CX.lo-=1
-//                    }
-//                }
-//            }
-//            
-//            var status = Status.inexact
-//            // get remainder
-//            __shl_128_long(&Qh1, Qh, (128 - amount));
-//            
-//            switch rnd_mode {
-//                case BID_ROUNDING_TO_NEAREST, BID_ROUNDING_TIES_AWAY:
-//                    // test whether fractional part is 0
-//                    if (Qh1.hi == 0x8000000000000000 && (Qh1.lo == 0)
-//                        && (Ql.hi < bid_reciprocals10_128[extra_digits].hi
-//                            || (Ql.hi == bid_reciprocals10_128[extra_digits].hi
-//                                && Ql.lo < bid_reciprocals10_128[extra_digits].lo))) {
-//                        status = []
-//                    }
-//                case BID_ROUNDING_DOWN, BID_ROUNDING_TO_ZERO:
-//                    if (((Qh1.hi == 0)) && ((Qh1.lo == 0))
-//                        && (Ql.hi < bid_reciprocals10_128[extra_digits].hi
-//                            || (Ql.hi == bid_reciprocals10_128[extra_digits].hi
-//                                && Ql.lo < bid_reciprocals10_128[extra_digits].lo))) {
-//                        status = []
-//                    }
-//                default:
-//                    // round up
-//                    var Stemp = UInt128(), cy = UInt64()
-//                    __add_carry_out(&Stemp.lo, &cy, Ql.lo, bid_reciprocals10_128[extra_digits].lo);
-//                    __add_carry_in_out(&Stemp.hi, &carry, Ql.hi, bid_reciprocals10_128[extra_digits].hi, cy);
-//                    __shr_128_long(&Qh, Qh1, (128 - amount))
-//                    Tmp.lo = 1
-//                    Tmp.hi = 0
-//                    __shl_128_long(&Tmp1, Tmp, amount);
-//                    Qh.lo += carry;
-//                    if (Qh.lo < carry) {
-//                        Qh.hi+=1
-//                    }
-//                    if __unsigned_compare_ge_128 (Qh, Tmp1) {
-//                        status = []
-//                    }
-//            }
-//            
-//            if !status.isEmpty {
-//                if uf_check {
-//                    status.insert(.underflow)
-//                }
-//                pfpsf.formUnion(status)
-//            }
-//        }
-//        return Decimal32.get_BID32 (UInt32(sign_x >> 32), exponent_x - DECIMAL_EXPONENT_BIAS_128 + Decimal32.EXPONENT_BIAS,
-//                                    UInt32(CX.lo), rnd_mode, &pfpsf)
-//    }
+
     
     /*
      * Takes a BID128 as input and converts it to a BID64 and returns it.

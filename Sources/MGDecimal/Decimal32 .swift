@@ -130,8 +130,7 @@ extension Decimal32 : AdditiveArithmetic, Comparable, SignedNumeric, Strideable,
     }
     
     public mutating func formRemainder(dividingBy other: Decimal32) {
-        let rem = Decimal32.bid32_rem(self.x, other.x, &Decimal32.state)
-        self = Decimal32(raw: rem)
+        x = Decimal32.bid32_rem(self.x, other.x, &Decimal32.state)
     }
     
     public mutating func formTruncatingRemainder(dividingBy other: Decimal32) {

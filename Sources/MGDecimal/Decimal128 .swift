@@ -2,8 +2,8 @@ import Foundation
 
 /// Decimal128 implementation according to IEEE 754.
 /// A UInt128 implementation is included as part of this library. (maybe)
-public struct Decimal128 : ExpressibleByStringLiteral, ExpressibleByFloatLiteral, CustomStringConvertible,
-                           ExpressibleByIntegerLiteral {
+public struct Decimal128 : CustomStringConvertible, ExpressibleByStringLiteral, ExpressibleByIntegerLiteral,
+                           ExpressibleByFloatLiteral, Codable, Hashable {
 
     private static var enableStateOutput = false   // set to true to monitor variable state (i.e., invalid operations, etc.)
     
@@ -53,51 +53,139 @@ public struct Decimal128 : ExpressibleByStringLiteral, ExpressibleByFloatLiteral
     public init(_ value: Decimal64) { x = Decimal64.bid64_to_bid128(value.x, &Decimal128.state) }
     public init(_ value: Decimal32) { x = Decimal32.bid32_to_bid128(value.x, &Decimal128.state) }
     
+    public init(_ value: Int = 0) { self.init(integerLiteral: value) }
+    public init<Source>(_ value: Source) where Source : BinaryInteger { self.init(Int(value)) }
+    
+    public init?<T>(exactly source: T) where T : BinaryInteger {
+        self.init(Int(source))  // FIX ME
+    }
+    
+    public init(sign: FloatingPointSign, exponentBitPattern: UInt, significandDigits: [UInt8]) {
+        self.init() /* TBD */
+    }
+    
+    public init(sign: FloatingPointSign, exponent: Int, significand: Decimal128) {
+//        let sgn = sign == .minus ? Decimal64.MASK_SIGN : 0
+//        var s : (sign: UInt128, exponent: Int, significand: UInt128) = (UInt128(), 0, UInt128())
+        self.init()
+//        if Decimal128.unpack_BID128(&s.sign, &s.exponent, &s.significand, significand.x) {
+//            x = Decimal128.get_BID128(sgn, exponent, s.significand, Decimal64.rounding, &Decimal64.state)
+//        }
+    }
+    
+    public init(signOf: Decimal128, magnitudeOf: Decimal128) {
+        let sign = signOf.isSignMinus
+        self = sign ? -magnitudeOf.magnitude : magnitudeOf.magnitude
+    }
+    
     public var description: String { Decimal128.bid128_to_string(x) }
     
 }
 
 /// Numerical properties
 ///
-extension Decimal128 {
+extension Decimal128 : DecimalFloatingPoint {
+    
+    public static var exponentMaximum: Int          { MAX_EXPON }
+    public static var exponentBias: Int             { EXPONENT_BIAS }
+    public static var significandMaxDigitCount: Int { MAX_FORMAT_DIGITS_128 }
+    
+    public var significandDigitCount: Int {
+//        guard let x = unpack() else { return -1 }
+        return 0 /* Decimal64.digitsIn(x.significand) */
+    }
+    
+    public var exponentBitPattern: UInt { 0
+//        let x = unpack()
+//        return UInt64(x?.exponent ?? 0)
+    }
+    
+    public var significandDigits: [UInt8] { []
+//        guard let x = unpack() else { return [] }
+//        return Array(String(x.significand)).map { UInt8($0.wholeNumberValue!) }
+    }
+    
+    public var decade: Decimal128 { self /* TBD */
+//        var res = UInt64(), exp = 0
+//        Decimal64.frexp(x, &res, &exp)
+//        return Decimal64(raw: return_bid64(0, exp+Decimal64.exponentBias, 1))
+    }
+
+    public func isTotallyOrdered(belowOrEqualTo other: Decimal128) -> Bool { true
+        /* TBD */
+    }
     
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // MARK: - Numeric State variables
-    var sign: FloatingPointSign { x.hi & Decimal128.MASK_SIGN != 0 ? .minus : .plus }
-    var magnitude: Decimal128   { Decimal128(raw: UInt128(w: [x.lo, x.hi & ~Decimal128.MASK_SIGN])) }
-    var decimal32: Decimal32    { Decimal32(raw: Decimal128.bid128_to_bid32(x, Decimal128.rounding, &Decimal128.state)) }
-    var decimal64: Decimal64    { Decimal64(raw: Decimal128.bid128_to_bid64(x, Decimal128.rounding, &Decimal128.state)) }
-    var dpd128: UInt128         { Decimal128.bid_to_dpd128(x) }
-    var int: Int                { Decimal128.bid128_to_int(x, &Decimal128.state) }
-    var double: Double          { Decimal128.bid128_to_double(x, Decimal128.rounding, &Decimal128.state) }
+    public var sign: FloatingPointSign { x.hi & Decimal128.MASK_SIGN != 0 ? .minus : .plus }
+    public var magnitude: Decimal128   { Decimal128(raw: UInt128(w: [x.lo, x.hi & ~Decimal128.MASK_SIGN])) }
+    public var decimal32: Decimal32    { Decimal32(raw: Decimal128.bid128_to_bid32(x, Decimal128.rounding, &Decimal128.state)) }
+    public var decimal64: Decimal64    { Decimal64(raw: Decimal128.bid128_to_bid64(x, Decimal128.rounding, &Decimal128.state)) }
+    public var dpd128: UInt128         { Decimal128.bid_to_dpd128(x) }
+    public var int: Int                { Decimal128.bid128_to_int(x, &Decimal128.state) }
+    public var double: Double          { Decimal128.bid128_to_double(x, Decimal128.rounding, &Decimal128.state) }
+    
+    public var isZero: Bool         { false /*TBD*/ }
+    public var isSignMinus: Bool    { sign == .minus }
+    public var isInfinite: Bool     { ((x.hi & Decimal64.MASK_INF) == Decimal128.MASK_INF) && !isNaN }
+    public var isNaN: Bool          { (x.hi & Decimal64.MASK_NAN) == Decimal128.MASK_NAN }
+    public var isSignalingNaN: Bool { (x.hi & Decimal64.MASK_SNAN) == Decimal128.MASK_SNAN }
+    public var isFinite: Bool       { (x.hi & Decimal64.MASK_INF) != Decimal128.MASK_INF }
+    public var isNormal: Bool       { /*_isNormal*/ true }
+    public var isSubnormal: Bool    { /*_isSubnormal*/ false }
+    public var isCanonical: Bool    { /*_isCanonical*/ true }
+    public var isBIDFormat: Bool    { true }
+    public var ulp: Decimal128      { nextUp - self }
+    public var nextUp: Decimal128   { /* Decimal128(raw: Decimal128.bid128_nextup(x, &Decimal128.state))*/ self }
     
 }
 
-extension Decimal128 /* : SignedNumeric */ {
-
-//    public init?<T>(exactly source: T) where T : BinaryInteger { self.init(Int64(source)) }
+extension Decimal128 : FloatingPoint {
     
-//    public var magnitude: MGDecimal128 { MGDecimal128(sign: .plus, exponent: exponent, mantissa: _significand) }
-    
-    public static func * (lhs: Decimal128, rhs: Decimal128) -> Decimal128 {
-        assertionFailure("Unimplemented \(#function) function")
-        return lhs
+    public var exponent: Int {
+        /* TBD */ 0
     }
     
-    public static func *= (lhs: inout Decimal128, rhs: Decimal128) { lhs = lhs * rhs }
-
-}
-
-extension Decimal128 /* : FloatingPoint */ {
-
-    public static func / (lhs: Decimal128, rhs: Decimal128) -> Decimal128 { assertionFailure("Unimplemented \(#function) function"); return lhs }
-    public static func /= (lhs: inout Decimal128, rhs: Decimal128) { lhs = lhs / rhs }
+    public var significand: Decimal128 {
+        /* TBD */ self
+    }
     
-    public mutating func round(_ rule: FloatingPointRoundingRule) { assertionFailure("Unimplemented \(#function) function") }
-    public mutating func formRemainder(dividingBy other: Decimal128) { assertionFailure("Unimplemented \(#function) function") }
-    public mutating func formTruncatingRemainder(dividingBy other: Decimal128) { assertionFailure("Unimplemented \(#function) function") }
-    public mutating func formSquareRoot() { assertionFailure("Unimplemented \(#function) function") }
-    public mutating func addProduct(_ lhs: Decimal128, _ rhs: Decimal128) { assertionFailure("Unimplemented \(#function) function") }
+
+    public mutating func negate() { x.hi = x.hi ^ Decimal64.SIGN_MASK64 }
+    
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // MARK: - Basic arithmetic operations
+    
+    public func isEqual(to other: Decimal128) -> Bool { Decimal128.equal(self.x, other.x, &Decimal128.state) }
+    public func isLess(than other: Decimal128) -> Bool { Decimal128.lessThan(self.x, other.x, &Decimal128.state) }
+    public func isLessThanOrEqualTo(_ other: Decimal128) -> Bool { self < other || self == other }
+    public static func == (lhs: Decimal128, rhs: Decimal128) -> Bool { lhs.isEqual(to: rhs) }
+    public static func < (lhs: Decimal128, rhs: Decimal128) -> Bool { lhs.isLess(than: rhs) }
+    
+    public static func + (lhs: Decimal128, rhs: Decimal128) -> Decimal128 {
+        Decimal128(raw: Decimal128.add(lhs.x, rhs.x, Decimal128.rounding, &Decimal128.state))
+    }
+    
+    public static func / (lhs: Decimal128, rhs: Decimal128) -> Decimal128 {
+        Decimal128(raw: Decimal128.div(lhs.x, rhs.x, Decimal128.rounding, &Decimal128.state))
+    }
+    
+    public static func * (lhs: Decimal128, rhs: Decimal128) -> Decimal128 {
+        Decimal128(raw: Decimal128.mul(lhs.x, rhs.x, Decimal128.rounding, &Decimal128.state))
+    }
+    
+    public static func /= (lhs: inout Decimal128, rhs: Decimal128) { lhs = lhs / rhs }
+    public static func *= (lhs: inout Decimal128, rhs: Decimal128) { lhs = lhs * rhs }
+    public static func - (lhs: Decimal128, rhs: Decimal128) -> Decimal128 { lhs + (-rhs) }
+    
+    mutating public func round(_ rule: FloatingPointRoundingRule) { assertionFailure("Unimplemented \(#function) function") }
+    mutating public func formRemainder(dividingBy other: Decimal128) { assertionFailure("Unimplemented \(#function) function") }
+    mutating public func formTruncatingRemainder(dividingBy other: Decimal128) { assertionFailure("Unimplemented \(#function) function") }
+    mutating public func formSquareRoot() { assertionFailure("Unimplemented \(#function) function") }
+    mutating public func addProduct(_ lhs: Decimal128, _ rhs: Decimal128) { assertionFailure("Unimplemented \(#function) function") }
+    
+    public func distance(to other: Decimal128) -> Decimal128 { other - self }
+    public func advanced(by n: Decimal128) -> Decimal128 { self + n }
     
 }
 

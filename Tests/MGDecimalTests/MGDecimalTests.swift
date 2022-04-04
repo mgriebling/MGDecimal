@@ -1235,9 +1235,6 @@ final class MGDecimalTests: XCTestCase {
                     } else if test.id.hasSuffix("mul") {
                         res = t1 * t2
                     } else {
-                        if testID == 37 {
-                            print(t1, t2)
-                        }
                         res = t1 / t2
                     }
                     let dtest = Decimal32(raw:UInt32(test.res))
@@ -1367,7 +1364,7 @@ final class MGDecimalTests: XCTestCase {
     func testUInt128() throws {
         let y : UInt128 = "0xA207_8000_0000_0000_0000_0000_0000_03D0"
         let x : UInt128 = "1_000_000_000_000_000_000_000_000_000_000_000"
-        let div : UInt128 = 215373
+        let div : UInt128 = 215_373
         let rem : UInt128 = "877_543_595_382_617_630_722_487_884_973_008"
         XCTAssert(x.description == "1000000000000000000000000000000000")
         XCTAssert(y.description == "215373877543595382617630722487884973008")
