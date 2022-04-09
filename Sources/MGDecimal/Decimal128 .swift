@@ -115,6 +115,10 @@ extension Decimal128 : DecimalFloatingPoint {
         /* TBD */
     }
     
+    static func _isZero(_ x:UInt128) -> Bool {
+        return false
+    }
+    
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // MARK: - Numeric State variables
     public var sign: FloatingPointSign { x.hi & Decimal128.MASK_SIGN != 0 ? .minus : .plus }
@@ -125,7 +129,7 @@ extension Decimal128 : DecimalFloatingPoint {
     public var int: Int                { Decimal128.bid128_to_int(x, &Decimal128.state) }
     public var double: Double          { Decimal128.bid128_to_double(x, Decimal128.rounding, &Decimal128.state) }
     
-    public var isZero: Bool         { false /*TBD*/ }
+    public var isZero: Bool         { Decimal128._isZero(x) }
     public var isSignMinus: Bool    { sign == .minus }
     public var isInfinite: Bool     { ((x.hi & Decimal64.MASK_INF) == Decimal128.MASK_INF) && !isNaN }
     public var isNaN: Bool          { (x.hi & Decimal64.MASK_NAN) == Decimal128.MASK_NAN }

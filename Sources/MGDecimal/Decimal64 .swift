@@ -175,13 +175,13 @@ extension Decimal64 : DecimalFloatingPoint {
     public static var significandMaxDigitCount: Int { MAX_DIGITS }
     
     public var significandDigitCount: Int {
-//        guard let x = unpack() else { return -1 }
-        return 0 /* Decimal64.digitsIn(x.significand) */
+        guard let x = unpack() else { return -1 }
+        return Decimal64.digitsIn(x.significand)
     }
     
-    public var exponentBitPattern: UInt { 0 /* TBD */
-//        let x = unpack()
-//        return UInt64(x?.exponent ?? 0)
+    public var exponentBitPattern: UInt {
+        let x = unpack()
+        return UInt(x?.exponent ?? 0)
     }
     
     public var significandDigits: [UInt8] {
@@ -189,10 +189,10 @@ extension Decimal64 : DecimalFloatingPoint {
         return Array(String(x.significand)).map { UInt8($0.wholeNumberValue!) }
     }
     
-    public var decade: Decimal64 { self /* TBD */
-//        var res = UInt64(), exp = 0
-//        Decimal64.frexp(x, &res, &exp)
-//        return Decimal64(raw: return_bid64(0, exp+Decimal64.exponentBias, 1))
+    public var decade: Decimal64 {
+        var res = UInt64(), exp = 0
+        Decimal64.frexp(x, &res, &exp)
+        return Decimal64(raw: return_bid64(0, exp+Decimal64.exponentBias, 1))
     }
 }
 
@@ -215,8 +215,8 @@ public extension Decimal64 {
     }
     
     var significand: Decimal64 {
-        let /* exp = 0, */ m = UInt64()
-//        Decimal64.frexp(x, &m, &exp)
+        var exp = 0, m = UInt64()
+        Decimal64.frexp(x, &m, &exp)
         return Decimal64(raw: m)
     }
     
@@ -226,36 +226,38 @@ public extension Decimal64 {
     }
     
     var exponent: Int {
-        let exp = 0 
-//        Decimal64.frexp(x, &m, &exp)
+        var exp = 0, m = UInt64()
+        Decimal64.frexp(x, &m, &exp)
         return exp
     }
     
     private var _isZero: Bool {
         if (x & Decimal64.INFINITY_MASK64) == Decimal64.INFINITY_MASK64 { return false }
         if (Decimal64.MASK_STEERING_BITS & x) == Decimal64.MASK_STEERING_BITS {
-            return (x & Decimal64.MASK_BINARY_SIG2) | Decimal64.MASK_BINARY_OR2 > Decimal64.MAX_NUMBER
+            return ((x & Decimal64.MASK_BINARY_SIG2) | Decimal64.MASK_BINARY_OR2) > Decimal64.MAX_NUMBER
         } else {
             return (x & Decimal64.MASK_BINARY_SIG1) == 0
         }
     }
     
     private var _isCanonical: Bool {
-        if self.isNaN {    // NaN
-            if (x & 0x01f00000) != 0 {
-                return false
-            } else if (x & 0x000fffff) > 999999 {
-                return false
+        let res:Bool
+        if ((x & Decimal64.MASK_NAN) == Decimal64.MASK_NAN) {    // NaN
+            if (x & 0x01fc000000000000) != 0 {
+                res = false
+            } else if (x & 0x0003ffffffffffff) > 999999999999999 {    // payload
+                res = false
             } else {
-                return true
+                res = true
             }
         } else if (x & Decimal64.MASK_INF) == Decimal64.MASK_INF {
-            return (x & 0x03ffffff) == 0
-        } else if (x & Decimal64.MASK_STEERING_BITS) == Decimal64.MASK_STEERING_BITS { // 24-bit
-            return ((x & Decimal64.MASK_BINARY_SIG2) | Decimal64.MASK_BINARY_OR2) <= Decimal64.MAX_NUMBER
-        } else { // 23-bit coeff.
-            return true
+            res = (x & 0x03ffffffffffffff) == 0
+        } else if (x & Decimal64.MASK_STEERING_BITS) == Decimal64.MASK_STEERING_BITS {    // 54-bit coeff.
+            res = ((x & Decimal64.MASK_BINARY_SIG2) | Decimal64.MASK_BINARY_OR2) <= 9999999999999999
+        } else {    // 53-bit coeff.
+            res = true
         }
+        return res
     }
     
     static private func validDecode(_ x: UInt64) -> (exp:Int, sig:UInt64)? {
@@ -266,41 +268,39 @@ public extension Decimal64 {
             sig_x = (x & MASK_BINARY_SIG2) | MASK_BINARY_OR2
             // check for zero or non-canonical
             if sig_x > Decimal64.MAX_NUMBER || sig_x == 0 { return nil } // zero or non-canonical
-            exp_x = Int((x & MASK_BINARY_EXPONENT2) >> 21)
+            exp_x = Int((x & MASK_BINARY_EXPONENT2) >> 51)
         } else {
             sig_x = (x & MASK_BINARY_SIG1)
             if sig_x == 0 { return nil } // zero
-            exp_x = Int((x & MASK_BINARY_EXPONENT1) >> 23)
+            exp_x = Int((x & MASK_BINARY_EXPONENT1) >> 53)
         }
         return (exp_x, sig_x)
     }
     
     private var _isNormal: Bool {
-        guard let result = Decimal64.validDecode(x) else { return false }
+        guard let res = Decimal64.validDecode(x) else { return false }
         
-        // if exponent is less than -95, the number may be subnormal
-        // if (exp_x - 101 = -95) the number may be subnormal
-        if result.exp < 6 {
-//            let sig_x_prime = UInt64(result.sig) * UInt64(Decimal64.bid_mult_factor[result.exp])
-//            return sig_x_prime >= 1000000 // subnormal test
-            return false
-        } else {
-            return true // normal
+        // if exponent is less than -383, the number may be subnormal
+        // if (exp_x - 398 = -383) the number may be subnormal
+        if res.exp < 15 {
+            var sig_x_prime = UInt128()
+            __mul_64x64_to_128MACH(&sig_x_prime, res.sig, bid_mult_factor[res.exp])
+            return !(sig_x_prime.hi == 0 && sig_x_prime.lo < 1000000000000000)
         }
+        return true    // normal
     }
     
     private var _isSubnormal:Bool {
-        guard let result = Decimal64.validDecode(x) else { return false }
+        guard let res = Decimal64.validDecode(x) else { return false }
         
-        // if exponent is less than -95, the number may be subnormal
-        // if (exp_x - 101 = -95) the number may be subnormal
-        if result.exp < 6 {
-//            let sig_x_prime = UInt64(result.sig) * UInt64(Decimal64.bid_mult_factor[result.exp])
-//            return sig_x_prime < 1000000  // subnormal test
-            return false
-        } else {
-            return false // normal
+        // if exponent is less than -383, the number may be subnormal
+        // if (exp_x - 398 = -383) the number may be subnormal
+        if res.exp < 15 {
+            var sig_x_prime = UInt128()
+            __mul_64x64_to_128MACH(&sig_x_prime, res.sig, bid_mult_factor[res.exp])
+            return sig_x_prime.hi == 0 && sig_x_prime.lo < 1000000000000000
         }
+        return false    // normal
     }
     
     var isZero: Bool         { _isZero }
@@ -314,7 +314,7 @@ public extension Decimal64 {
     var isCanonical: Bool    { _isCanonical }
     var isBIDFormat: Bool    { true }
     var ulp: Decimal64       { nextUp - self }
-    var nextUp: Decimal64    { /* Decimal64(raw: Decimal64.bid64_nextup(x, &Decimal64.state))*/ self }
+    var nextUp: Decimal64    { Decimal64(raw: Decimal64.bid64_nextup(x, &Decimal64.state)) }
     
 }
 

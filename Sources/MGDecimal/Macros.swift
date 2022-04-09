@@ -396,6 +396,53 @@ func srl384_short(_ x5: UInt64, _ x4: UInt64, _ x3:UInt64, _ x2:UInt64, _ x1:UIn
     return UInt384(w: [_x0, _x1, _x2, _x3, _x4, _x5])
 }
 
+func __tight_bin_range_128(_ bp: inout Int, _ P:inout UInt128, _ bin_expon:Int) {
+    var M = UInt64(1)
+    bp = bin_expon
+    if bp < 63 {
+        M <<= (bp+1)
+        if P.lo >= M { bp+=1 }
+    } else if bp > 64 {
+        M <<= (bp+1-64)
+        if (P.hi > M) || (P.hi == M && P.lo != 0) {
+            bp+=1
+        }
+    } else if P.hi != 0 {
+        bp+=1
+    }
+}
+
+func __test_equal_128(_ A:UInt128,  _ B:UInt128) -> Bool { A.hi==B.hi && A.lo==B.lo }
+
+//
+//   No overflow/underflow checking or checking for coefficients above 2^53
+//
+func very_fast_get_BID64_small_mantissa(_ sgn:UInt64, _ expon:Int, _ coeff:UInt64) -> UInt64 {
+    // no UF/OF
+    var r = UInt64(expon) << Decimal64.EXPONENT_SHIFT_SMALL64
+    r |= (coeff | sgn)
+    return r
+}
+
+///////////////////////////////////////////////////////////////////
+// get P/10^extra_digits
+// result fits in 64 bits
+///////////////////////////////////////////////////////////////////
+func __truncate (_ P:UInt128, _ extra_digits:Int) -> UInt64 {
+    // extra_digits <= 16
+    var Q_high = UInt128(), Q_low = UInt128(), C128 = UInt128()
+    
+    // get P*(2^M[extra_digits])/10^extra_digits
+    __mul_128x128_full (&Q_high, &Q_low, P, bid_reciprocals10_128[extra_digits])
+    
+    // now get P/10^extra_digits: shift Q_high right by M[extra_digits]-128
+    let amount = bid_recip_scale[extra_digits]
+    __shr_128(&C128, &Q_high, amount)
+    
+    let C64 = C128.lo
+    return C64
+}
+
 // Compare "<" two 2-part unsigned integers
 @inlinable func lt128(_ x_hi:UInt64, _ x_lo:UInt64, _ y_hi:UInt64, _ y_lo:UInt64) -> Bool {
   (((x_hi) < (y_hi)) || (((x_hi) == (y_hi)) && ((x_lo) < (y_lo))))
@@ -422,6 +469,16 @@ func __unsigned_compare_ge_128(_ A:UInt128, _ B:UInt128) -> Bool {
 // Counting leading zeros in an unsigned 2-part 128-bit word
 @inlinable func clz128(_ n_hi:UInt64, _ n_lo:UInt64) -> Int    { (n_hi == 0) ? 64 + clz64(n_lo) : clz64(n_hi) }
 @inlinable func clz128_nz(_ n_hi:UInt64, _ n_lo:UInt64) -> Int { (n_hi == 0) ? 64 + clz64(n_lo) : clz64(n_hi) }
+
+// subtract 64-bit value from 128-bit
+func __sub_128_64(_ R128:inout UInt128, _ A128:UInt128, _ B64:UInt64) {
+    var R64H = A128.hi
+    if A128.lo < B64 {
+      R64H -= 1
+    }
+    R128.hi = R64H
+    R128.lo = A128.lo - B64
+}
 
 func __mul_64x256_to_320(_ P:inout UInt384, _ A:UInt64, _ B:UInt256) {
     var lP0=UInt128(), lP1=UInt128(), lP2=UInt128(), lP3=UInt128()
@@ -486,6 +543,17 @@ func __mul_64x64_to_128(_ P: inout UInt128, _ CX:UInt64, _ CY:UInt64) {
 //    (P).lo = (PM<<32)+(BID_UINT32)PL;
 }
 
+func __mul_64x64_to_64(_ P64: inout UInt64, _ CX:UInt64, _ CY:UInt64) {
+    P64 = CX * CY
+}
+
+func __mul_64x128_short(_ Ql: inout UInt128, _ A:UInt64, _ B:UInt128) {
+    var ALBH_L = UInt64()
+    __mul_64x64_to_64(&ALBH_L, A, B.hi)
+    __mul_64x64_to_128(&Ql, A, B.lo)
+    Ql.hi += ALBH_L
+}
+
 // get full 64x64bit product
 // Note:
 // This macro is used for CX < 2^61, CY < 2^61
@@ -493,19 +561,6 @@ func __mul_64x64_to_128(_ P: inout UInt128, _ CX:UInt64, _ CY:UInt64) {
 func __mul_64x64_to_128_fast(_ P: inout UInt128, _ CX:UInt64, _ CY:UInt64) {
     let res = CX.multipliedFullWidth(by: CY)
     P.hi = res.high; P.lo = res.low
-//    CXH = (CX) >> 32;
-//    CXL = (BID_UINT32)(CX);
-//    CYH = (CY) >> 32;
-//    CYL = (BID_UINT32)(CY);
-//
-//    PM = CXH*CYL;
-//    PL = CXL*CYL;
-//    PH = CXH*CYH;
-//    PM += CXL*CYH;
-//    PM += (PL>>32);
-//
-//    (P).hi = PH + (PM>>32);
-//    (P).lo = (PM<<32)+(BID_UINT32)PL;
 }
 
 func __mul_64x128_full(_ Ph:inout UInt64, _ Ql: inout UInt128,  _ A:UInt64, _ B:UInt128) {

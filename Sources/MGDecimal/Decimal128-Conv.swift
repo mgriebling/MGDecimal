@@ -456,6 +456,32 @@ extension Decimal128 {
         return pres
     }
     
+    ///////////////////////////////////////////////////////////////////
+    // return number of decimal digits in 128-bit value X
+    ///////////////////////////////////////////////////////////////////
+    static func __get_dec_digits64(_ X: UInt128) -> Int {
+        if X.hi == 0 {
+            if X.lo == 0 { return 0 }
+            //--- get number of bits in the coefficients of x and y ---
+            let tempx = Double(X.lo)
+            let bin_expon_cx = Int((tempx.bitPattern & Decimal64.MASK_BINARY_EXPONENT) >> 52) - 0x3ff
+            // get number of decimal digits in the coeff_x
+            var digits_x = Int(bid_estimate_decimal_digits[bin_expon_cx])
+            if X.lo >= bid_power10_table_128[digits_x].lo {
+                digits_x+=1
+            }
+            return digits_x
+        }
+        let tempx = Double(X.hi)
+        let bin_expon_cx = Int((tempx.bitPattern & Decimal64.MASK_BINARY_EXPONENT) >> 52) - 0x3ff
+        // get number of decimal digits in the coeff_x
+        var digits_x = Int(bid_estimate_decimal_digits[bin_expon_cx + 64])
+        if __unsigned_compare_ge_128(X, bid_power10_table_128[digits_x]) {
+            digits_x+=1
+        }
+        return digits_x
+    }
+    
     // **********************************************************************
 
     static func double_to_bid128 (_ x: Double, _ rnd_mode:Rounding, _ fpsc: inout Status) -> UInt128 {
