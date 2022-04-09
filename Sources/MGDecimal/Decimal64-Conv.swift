@@ -795,7 +795,7 @@ extension Decimal64 {
         
         // now get P/10^extra_digits: shift Q_high right by M[extra_digits]-128
         let amount = bid_recip_scale[extra_digits];
-        __shr_128(&C128, &Q_high, amount);
+        __shr_128(&C128, Q_high, amount);
         
         let C64 = C128.lo
         

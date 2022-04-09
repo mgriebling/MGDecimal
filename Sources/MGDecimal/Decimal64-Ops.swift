@@ -2971,7 +2971,7 @@ extension Decimal64 {
             
             // now get P/10^extra_digits: shift Q_high right by M[extra_digits]-128
             let amount = bid_recip_scale[extra_digits]
-            __shr_128(&C128, &Q_high, amount)
+            __shr_128(&C128, Q_high, amount)
             
             var C64 = C128.lo
             if rmode == 0 {   //BID_ROUNDING_TO_NEAREST
@@ -3195,7 +3195,7 @@ extension Decimal64 {
                         __mul_128x128_full(&Q_high, &Q_low, P, bid_reciprocals10_128[16])
                         
                         let amount = bid_recip_scale[16]
-                        __shr_128(&P, &Q_high, amount)
+                        __shr_128(&P, Q_high, amount)
                         
                         // get sticky bits
                         let amount2 = 64 - amount
@@ -3234,7 +3234,7 @@ extension Decimal64 {
                 
                 // now get P/10^extra_digits: shift Q_high right by M[extra_digits]-128
                 let amount = Int(bid_recip_scale[extra_digits])
-                __shr_128(&C128, &Q_high, amount)
+                __shr_128(&C128, Q_high, amount)
                 
                 C64 = C128.lo
                 

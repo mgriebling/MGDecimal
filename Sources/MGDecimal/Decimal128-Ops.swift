@@ -1113,6 +1113,7 @@ extension Decimal128 {
                             is_inexact_gt_midpoint = false
                             is_midpoint_lt_even = false
                             is_midpoint_gt_even = false
+                            
                             // determine inexactness of the rounding of C2*
                             // (cannot be followed by a second rounding)
                             // if (0 < f2* - 1/2 < 10^(-x1)) then
@@ -2381,6 +2382,97 @@ extension Decimal128 {
         }
     }
     
+    /*
+     If x is not a floating-point number, the results are unspecified (this
+     implementation returns x and *exp = 0). Otherwise, the frexp function
+     returns the value res, such that res has a magnitude in the interval
+     [1/10, 1) or zero, and x = res*2^*exp. If x is zero, both parts of the
+     result are zero
+     frexp does not raise any exceptions
+     */
+    static func frexp(_ x:UInt128, _ res:inout UInt128, _ exp:inout Int) {
+        var exp_x: UInt64
+        var sig_x = UInt128()
+        
+        if ((x.hi & MASK_SPECIAL) == MASK_SPECIAL) {
+            // if NaN or infinity
+            exp = 0;
+            res = x;
+            // the binary frexp quitetizes SNaNs, so do the same
+            if ((x.hi & MASK_SNAN) == MASK_SNAN) { // x is SNAN
+                //   // set invalid flag
+                //   *pfpsf |= BID_INVALID_EXCEPTION;
+                // return quiet (x)
+                res.hi = x.hi & 0xfdffffffffffffff;
+            }
+        } else {
+            // x is 0, non-canonical, normal, or subnormal
+            // check for non-canonical values with 114 bit-significands; can be zero too
+            if ((x.hi & 0x6000000000000000) == 0x6000000000000000) {
+                exp = 0;
+                exp_x = (x.hi & MASK_EXP2) >> 47; // biased
+                res.hi = (x.hi & 0x8000000000000000) | (UInt64(exp_x) << 49);
+                // zero of same sign
+                res.lo = 0x0000000000000000;
+                return
+            }
+            // unpack x
+            exp_x = (x.hi & MASK_EXP) >> 49 // biased
+            sig_x.hi = x.hi & MASK_COEFF
+            sig_x.lo = x.lo
+            
+            // check for non-canonical values or zero
+            if ((sig_x.hi > 0x0001ed09bead87c0) || (sig_x.hi == 0x0001ed09bead87c0
+                    && (sig_x.lo > 0x378d8e63ffffffff)) || ((sig_x.hi == 0x0) && (sig_x.lo == 0x0))) {
+                exp = 0
+                res.hi = (x.hi & 0x8000000000000000) | (UInt64(exp_x) << 49);
+                // zero of same sign
+                res.lo = 0x0000000000000000;
+                return
+            } else {
+                // continue, x is neither zero nor non-canonical
+            }
+            // x is normal or subnormal, with exp_x=biased exponent & sig_x=coefficient
+            // determine the number of decimal digits in sig_x, which fits in 113 bits
+            // q = nr. of decimal digits in sig_x (1 <= q <= 34)
+            //  determine first the nr. of bits in sig_x
+            var tmp = 0.0, x_nr_bits = 0
+            if (sig_x.hi == 0) {
+                if (sig_x.lo >= 0x0020000000000000) { // z >= 2^53
+                    // split the 64-bit value in two 32-bit halves to avoid rounding errors
+                    if (sig_x.lo >= 0x0000000100000000) { // z >= 2^32
+                        tmp = Double(sig_x.lo >> 32); // exact conversion
+                        x_nr_bits = 32 + Int(((UInt(tmp.bitPattern >> 52)) & 0x7ff) - 0x3ff);
+                    } else { // z < 2^32
+                        tmp = Double(sig_x.lo) // exact conversion
+                        x_nr_bits = Int(((UInt(tmp.bitPattern >> 52)) & 0x7ff) - 0x3ff);
+                    }
+                } else { // if z < 2^53
+                    tmp = Double(sig_x.lo) // exact conversion
+                    x_nr_bits = Int(((UInt(tmp.bitPattern >> 52)) & 0x7ff) - 0x3ff);
+                }
+            } else { // sig_x.hi != 0 => nr. bits = 65 + nr_bits (sig_x.hi)
+                tmp = Double(sig_x.hi) // exact conversion
+                x_nr_bits = 64 + Int(((UInt(tmp.bitPattern >> 52)) & 0x7ff) - 0x3ff);
+            }
+            var q = Int(bid_nr_digits[x_nr_bits].digits)
+            if (q == 0) {
+                q = Int(bid_nr_digits[x_nr_bits].digits1)
+                if (sig_x.hi > bid_nr_digits[x_nr_bits].threshold_hi ||
+                    (sig_x.hi == bid_nr_digits[x_nr_bits].threshold_hi &&
+                     sig_x.lo >= bid_nr_digits[x_nr_bits].threshold_lo)) {
+                    q+=1
+                }
+            }
+            // Do not add trailing zeros if q < 34; leave sig_x with q digits
+            exp = Int(exp_x) - 6176 + q
+            // assemble the result; sig_x < 2^113 so it fits in 113 bits
+            res.hi = (x.hi & 0x8001ffffffffffff) | UInt64((-q + 6176) << 49)
+            res.lo = x.lo
+            // replace exponent
+        }
+    }
+    
     static func div(_ x:UInt128, _ y:UInt128, _ rnd_mode: Rounding, _ pfpsf: inout Status) -> UInt128 {
         return x
     }
@@ -2390,7 +2482,442 @@ extension Decimal128 {
     }
     
     static func sqrt(_ x: UInt128, _ rnd_mode: Rounding, _ pfpsf: inout Status) -> UInt128 {
-        return 0
+        //        BID128_FUNCTION_ARG1 (bid128_sqrt, x)
+        //
+        //             BID_UINT256 M256, C256, C4, C8;
+        //             BID_UINT128 CX, CX1, CX2, A10, S2, T128, TP128, CS, CSM, res;
+        //             BID_UINT64 sign_x, Carry;
+        //             BID_SINT64 D;
+        //             int_float fx, f64;
+        //             int exponent_x, bin_expon_cx;
+        //             int digits, scale, exponent_q;
+        //
+        //          BID_OPT_SAVE_BINARY_FLAGS()
+        
+        // unpack arguments, check for NaN or Infinity
+        var sign_x = UInt64(), Carry = UInt64(), CX = UInt128(), exponent_x = 0, res = UInt128()
+        var M256 = UInt256(), C256 = UInt256(), C4 = UInt256(), C8 = UInt256(), CX1 = UInt128()
+        if !unpack_BID128_value(&sign_x, &exponent_x, &CX, x) {
+            res = CX
+            //        res.hi = CX.hi;
+            //        res.lo = CX.lo;
+            // NaN ?
+            if ((x.hi & 0x7c00000000000000) == 0x7c00000000000000) {
+                if ((x.hi & 0x7e00000000000000) == 0x7e00000000000000) {   // sNaN
+                    pfpsf.insert(.invalidOperation)
+                }
+                res.hi = CX.hi & QUIET_MASK64;
+                return res
+            }
+            // x is Infinity?
+            if ((x.hi & 0x7800000000000000) == 0x7800000000000000) {
+                res.hi = CX.hi;
+                if (sign_x != 0) {
+                    // -Inf, return NaN
+                    res.hi = 0x7c00000000000000;
+                    pfpsf.insert(.invalidOperation)
+                }
+                return (res);
+            }
+            // x is 0 otherwise
+            
+            res.hi = sign_x | (((UInt64(exponent_x + EXPONENT_BIAS)) >> 1) << 49);
+            res.lo = 0;
+            return (res);
+        }
+        if sign_x != 0 {
+            res.hi = 0x7c00000000000000;
+            res.lo = 0;
+            pfpsf.insert(.invalidOperation)
+            return (res);
+        }
+        // 2^64
+        let f64 = Float(bitPattern: 0x5f800000)
+        
+        // fx ~ CX
+        let fx = Float(CX.hi) * f64 + Float(CX.lo)
+        let bin_expon_cx = Int((fx.bitPattern >> 23) & 0xff) - 0x7f;
+        var digits = Int(bid_estimate_decimal_digits[bin_expon_cx])
+        
+        var A10 = CX, CX2 = UInt128(), CS = UInt128(), S2 = UInt128()
+        if (exponent_x & 1) != 0 {
+            A10.hi = (CX.hi << 3) | (CX.lo >> 61);
+            A10.lo = CX.lo << 3;
+            CX2.hi = (CX.hi << 1) | (CX.lo >> 63);
+            CX2.lo = CX.lo << 1;
+            __add_128_128(&A10, A10, CX2);
+        }
+        
+        CS.lo = short_sqrt128(A10);
+        CS.hi = 0;
+        // check for exact result
+        if (CS.lo * CS.lo == A10.lo) {
+            __mul_64x64_to_128_fast(&S2, CS.lo, CS.lo);
+            if (S2.hi == A10.hi) {   // && S2.lo==A10.lo)
+                res = bid_get_BID128_very_fast(0, (exponent_x + EXPONENT_BIAS) >> 1, CS);
+                return (res);
+            }
+        }
+        // get number of digits in CX
+        let D = CX.hi - bid_power10_index_binexp_128[bin_expon_cx].hi;
+        if (D > 0 || (D == 0 && CX.lo >= bid_power10_index_binexp_128[bin_expon_cx].lo)) {
+            digits+=1
+        }
+        
+        // if exponent is odd, scale coefficient by 10
+        var scale = 67 - digits;
+        let exponent_q = exponent_x - scale;
+        scale += (exponent_q & 1);    // exp. bias is even
+        
+        var T128 = UInt128(), TP128 = UInt128()
+        if (scale > 38) {
+            T128 = bid_power10_table_128[scale - 37];
+            __mul_128x128_low(&CX1, CX, T128);
+            
+            TP128 = bid_power10_table_128[37];
+            __mul_128x128_to_256(&C256, CX1, TP128);
+        } else {
+            T128 = bid_power10_table_128[scale];
+            __mul_128x128_to_256(&C256, CX, T128);
+        }
+        
+        
+        // 4*C256
+        C4.w[3] = (C256.w[3] << 2) | (C256.w[2] >> 62);
+        C4.w[2] = (C256.w[2] << 2) | (C256.w[1] >> 62);
+        C4.w[1] = (C256.w[1] << 2) | (C256.w[0] >> 62);
+        C4.w[0] = C256.w[0] << 2;
+        
+        bid_long_sqrt128(&CS, C256);
+        //printf("C256=%016I64x %016I64x %016I64x %016I64x, CS=%016I64x %016I64x \n",C256.w[3],C256.w[2],C256.w[1],C256.w[0],CS.w[1],CS.w[0]);
+        let rmode = roundboundIndex(rnd_mode)
+        if (((rmode) & 3) == 0) {
+            // compare to midpoints
+            var CSM = UInt128()
+            CSM.hi = (CS.hi << 1) | (CS.lo >> 63);
+            CSM.lo = (CS.lo + CS.lo) | 1;
+            // CSM^2
+            //__mul_128x128_to_256(M256, CSM, CSM);
+            __sqr128_to_256(&M256, CSM);
+            
+            if (C4.w[3] > M256.w[3]
+                || (C4.w[3] == M256.w[3]
+                    && (C4.w[2] > M256.w[2]
+                        || (C4.w[2] == M256.w[2]
+                            && (C4.w[1] > M256.w[1]
+                                || (C4.w[1] == M256.w[1]
+                                    && C4.w[0] > M256.w[0])))))) {
+                // round up
+                CS.lo+=1
+                if CS.lo == 0 {
+                    CS.hi+=1
+                }
+            } else {
+                C8.w[1] = (CS.hi << 3) | (CS.lo >> 61);
+                C8.w[0] = CS.lo << 3;
+                // M256 - 8*CSM
+                __sub_borrow_out(&M256.w[0], &Carry, M256.w[0], C8.w[0]);
+                __sub_borrow_in_out(&M256.w[1], &Carry, M256.w[1], C8.w[1], Carry);
+                __sub_borrow_in_out(&M256.w[2], &Carry, M256.w[2], 0, Carry);
+                M256.w[3] = M256.w[3] - Carry;
+                
+                // if CSM' > C256, round up
+                if (M256.w[3] > C4.w[3]
+                    || (M256.w[3] == C4.w[3]
+                        && (M256.w[2] > C4.w[2]
+                            || (M256.w[2] == C4.w[2]
+                                && (M256.w[1] > C4.w[1]
+                                    || (M256.w[1] == C4.w[1]
+                                        && M256.w[0] > C4.w[0])))))) {
+                    // round down
+                    if CS.lo == 0 {
+                        CS.hi-=1
+                    }
+                    CS.lo-=1
+                }
+            }
+        } else {
+            __sqr128_to_256(&M256, CS);
+            C8.w[1] = (CS.hi << 1) | (CS.lo >> 63);
+            C8.w[0] = CS.lo << 1;
+            if (M256.w[3] > C256.w[3]
+                || (M256.w[3] == C256.w[3]
+                    && (M256.w[2] > C256.w[2]
+                        || (M256.w[2] == C256.w[2]
+                            && (M256.w[1] > C256.w[1]
+                                || (M256.w[1] == C256.w[1]
+                                    && M256.w[0] > C256.w[0])))))) {
+                __sub_borrow_out(&M256.w[0], &Carry, M256.w[0], C8.w[0])
+                __sub_borrow_in_out(&M256.w[1], &Carry, M256.w[1], C8.w[1], Carry)
+                __sub_borrow_in_out(&M256.w[2], &Carry, M256.w[2], 0, Carry)
+                M256.w[3] = M256.w[3] - Carry
+                M256.w[0]+=1
+                if M256.w[0] == 0 {
+                    M256.w[1]+=1
+                    if M256.w[1] == 0 {
+                        M256.w[2]+=1
+                        if M256.w[2] == 0 {
+                            M256.w[3]+=1
+                        }
+                    }
+                }
+                
+                if CS.lo == 0 {
+                    CS.hi-=1
+                }
+                CS.lo-=1
+                
+                if (M256.w[3] > C256.w[3]
+                    || (M256.w[3] == C256.w[3]
+                        && (M256.w[2] > C256.w[2]
+                            || (M256.w[2] == C256.w[2]
+                                && (M256.w[1] > C256.w[1]
+                                    || (M256.w[1] == C256.w[1]
+                                        && M256.w[0] > C256.w[0])))))) {
+                    
+                    if CS.lo == 0 {
+                        CS.hi-=1
+                    }
+                    CS.lo-=1
+                }
+            }
+            
+            else {
+                __add_carry_out(&M256.w[0], &Carry, M256.w[0], C8.w[0]);
+                __add_carry_in_out(&M256.w[1], &Carry, M256.w[1], C8.w[1], Carry);
+                __add_carry_in_out(&M256.w[2], &Carry, M256.w[2], 0, Carry);
+                M256.w[3] = M256.w[3] + Carry;
+                M256.w[0]+=1
+                if M256.w[0] == 0 {
+                    M256.w[1]+=1
+                    if M256.w[1] == 0  {
+                        M256.w[2]+=1
+                        if M256.w[2] == 0  {
+                            M256.w[3]+=1
+                        }
+                    }
+                }
+                if (M256.w[3] < C256.w[3]
+                    || (M256.w[3] == C256.w[3]
+                        && (M256.w[2] < C256.w[2]
+                            || (M256.w[2] == C256.w[2]
+                                && (M256.w[1] < C256.w[1]
+                                    || (M256.w[1] == C256.w[1]
+                                        && M256.w[0] <= C256.w[0])))))) {
+                    
+                    CS.lo+=1
+                    if CS.lo == 0  {
+                        CS.hi+=1
+                    }
+                }
+            }
+            // RU?
+            if rnd_mode == BID_ROUNDING_UP {
+                CS.lo+=1
+                if CS.lo == 0  {
+                    CS.hi+=1
+                }
+            }
+            
+        }
+        
+        pfpsf.insert(.inexact)
+        res = bid_get_BID128_fast(0, (exponent_q + EXPONENT_BIAS) >> 1, CS);
+        return (res);
+    }
+    
+    static func bid_long_sqrt128(_ pCS: inout UInt128, _ C256:UInt256) {
+        //      BID_UINT512 ARS0, ARS;
+        //      BID_UINT256 ARS00, AE, AE2, S;
+        //      BID_UINT128 ES, ES2, ARS1;
+        //      BID_UINT64 ES32, CY, MY;
+        //      double l64, l128, lx, l2, l1, l0;
+        //      int_double f64, ly;
+        //      int ey, k, k2;
+        
+        // 2^64
+        let f64 = Double(bitPattern: 0x43f0000000000000)
+        let l64 = f64
+        
+        let l128 = l64 * l64;
+        var lx = Double(C256.w[3]) * l64 * l128;
+        let l2 = Double(C256.w[2]) * l128;
+        lx = (lx + l2);
+        let l1 =  Double(C256.w[1]) * l64;
+        lx = (lx + l1);
+        let l0 =  Double(C256.w[0])
+        lx =  (lx + l0);
+        // sqrt(C256)
+        let ly = 1.0 / Foundation.sqrt(lx)
+        
+        let MY = (ly.bitPattern & 0x000fffffffffffff) | 0x0010000000000000
+        let ey = 0x3ff - (ly.bitPattern >> 52)
+        
+        // A10*RS^2, scaled by 2^(2*ey+104)
+        var ARS0 = UInt384(), ARS = UInt384()
+        __mul_64x256_to_320(&ARS0, MY, C256)
+        __mul_64x320_to_384(&ARS, MY, ARS0)
+        
+        // shr by k=(2*ey+104)-128
+        // expect k is in the range (192, 256) if result in [10^33, 10^34)
+        // apply an additional signed shift by 1 at the same time (to get eps=eps0/2)
+        var k = (ey << 1) + 104 - 128 - 192;
+        var k2 = 64 - k
+        var ES = UInt128(), ARS1 = UInt128(), ARS00 = UInt256(), CY = UInt64()
+        var S = UInt256(), AE = UInt256(), AE2 = UInt256(), ES2 = UInt128()
+        ES.lo = (ARS.w[3] >> (k + 1)) | (ARS.w[4] << (k2 - 1));
+        ES.hi = (ARS.w[4] >> k) | (ARS.w[5] << k2);
+        ES.hi = UInt64(Int64(ES.hi) >> 1)
+        
+        // A*RS >> 192 (for error term computation)
+        ARS1.lo = ARS0.w[3];
+        ARS1.hi = ARS0.w[4];
+        
+        // A*RS>>64
+        ARS00.w[0] = ARS0.w[1];
+        ARS00.w[1] = ARS0.w[2];
+        ARS00.w[2] = ARS0.w[3];
+        ARS00.w[3] = ARS0.w[4];
+        
+        if (Int64(ES.hi) < 0) {
+            ES.lo = 0 &- ES.lo
+            ES.hi = 0 &- ES.hi
+            if ES.lo != 0 {
+                ES.hi-=1
+            }
+            
+            // A*RS*eps
+            __mul_128x128_to_256(&AE, ES, ARS1);
+            
+            __add_carry_out(&S.w[0], &CY, ARS00.w[0], AE.w[0]);
+            __add_carry_in_out(&S.w[1], &CY, ARS00.w[1], AE.w[1], CY);
+            __add_carry_in_out(&S.w[2], &CY, ARS00.w[2], AE.w[2], CY);
+            S.w[3] = ARS00.w[3] + AE.w[3] + CY;
+        } else {
+            // A*RS*eps
+            __mul_128x128_to_256(&AE, ES, ARS1);
+            
+            __sub_borrow_out(&S.w[0], &CY, ARS00.w[0], AE.w[0]);
+            __sub_borrow_in_out(&S.w[1], &CY, ARS00.w[1], AE.w[1], CY);
+            __sub_borrow_in_out(&S.w[2], &CY, ARS00.w[2], AE.w[2], CY);
+            S.w[3] = ARS00.w[3] - AE.w[3] - CY;
+        }
+        
+        // 3/2*eps^2, scaled by 2^128
+        let ES32 = ES.hi + (ES.hi >> 1);
+        __mul_64x64_to_128(&ES2, ES32, ES.hi);
+        // A*RS*3/2*eps^2
+        __mul_128x128_to_256(&AE2, ES2, ARS1);
+        
+        // result, scaled by 2^(ey+52-64)
+        __add_carry_out(&S.w[0], &CY, S.w[0], AE2.w[0]);
+        __add_carry_in_out(&S.w[1], &CY, S.w[1], AE2.w[1], CY);
+        __add_carry_in_out(&S.w[2], &CY, S.w[2], AE2.w[2], CY);
+        S.w[3] = S.w[3] + AE2.w[3] + CY;
+        
+        // k in (0, 64)
+        k = ey + 51 - 128;
+        k2 = 64 - k;
+        S.w[0] = (S.w[1] >> k) | (S.w[2] << k2);
+        S.w[1] = (S.w[2] >> k) | (S.w[3] << k2);
+        
+        // round to nearest
+        S.w[0]+=1
+        if S.w[0] == 0 {
+            S.w[1]+=1
+        }
+        
+        pCS.lo = (S.w[1] << 63) | (S.w[0] >> 1);
+        pCS.hi = S.w[1] >> 1;
+    }
+    
+    static func short_sqrt128(_ A10:UInt128) -> UInt64 {
+        var ARS = UInt256(), ARS0 = UInt256(), AE0 = UInt256(), AE = UInt256(), S = UInt256()
+        var MY, ES, CY : UInt64
+        
+        // 2^64
+        let f64 = Double(bitPattern: 0x43f0000000000000)
+        let l64 = f64
+        let lx = Double(A10.hi) * l64 + Double(A10.lo)
+        let ly = 1.0 / Foundation.sqrt(lx)
+        
+        MY = (ly.bitPattern & 0x000fffffffffffff) | 0x0010000000000000
+        let ey = 0x3ff - (ly.bitPattern >> 52);
+        
+        // A10*RS^2
+        __mul_64x128_to_192(&ARS0, MY, A10);
+        __mul_64x192_to_256(&ARS, MY, ARS0);
+        
+        // shr by 2*ey+40, to get a 64-bit value
+        var k = Int(ey << 1) + 104 - 64;
+        if (k >= 128) {
+            if (k > 128) {
+                ES = (ARS.w[2] >> (k - 128)) | (ARS.w[3] << (192 - k));
+            } else {
+                ES = ARS.w[2]
+            }
+        } else {
+            var ARS0 = UInt128()
+            if k >= 64 {
+                ARS0.lo = ARS.w[1]
+                ARS0.hi = ARS.w[2]
+                k -= 64
+            }
+
+            if k != 0 {
+                __shr_128(&ARS0, ARS0, k)
+                ARS.w[0] = ARS0.lo
+            }
+            ES = ARS.w[0]
+        }
+        
+        ES = UInt64(Int64(ES) >> 1)
+        
+        if (Int64(ES) < 0) {
+            ES = 0 &- ES
+            
+            // A*RS*eps (scaled by 2^64)
+            __mul_64x192_to_256(&AE0, ES, ARS0);
+            
+            AE.w[0...2] = AE0.w[1...3]
+//            AE.w[0] = AE0.w[1];
+//            AE.w[1] = AE0.w[2];
+//            AE.w[2] = AE0.w[3];
+            CY = 0
+            __add_carry_out(&S.w[0], &CY, ARS0.w[0], AE.w[0]);
+            __add_carry_in_out(&S.w[1], &CY, ARS0.w[1], AE.w[1], CY);
+            S.w[2] = ARS0.w[2] + AE.w[2] + CY;
+        } else {
+            // A*RS*eps (scaled by 2^64)
+            __mul_64x192_to_256(&AE0, ES, ARS0);
+            
+            AE.w[0...2] = AE0.w[1...3]
+//            AE.w[1] = AE0.w[2]
+//            AE.w[2] = AE0.w[3]
+            CY = 0
+            __sub_borrow_out(&S.w[0], &CY, ARS0.w[0], AE.w[0]);
+            __sub_borrow_in_out(&S.w[1], &CY, ARS0.w[1], AE.w[1], CY);
+            S.w[2] = ARS0.w[2] - AE.w[2] - CY;
+        }
+        
+        k = Int(ey + 51)
+        
+        var S1 = UInt128()
+        if (k >= 64) {
+            if (k >= 128) {
+                S1.lo = S.w[2]
+                S1.hi = 0
+                k -= 128
+            } else {
+                S1.lo = S.w[1];
+                S1.hi = S.w[2];
+            }
+            k -= 64;
+        }
+        if k != 0 {
+            __shr_128(&S1, S1, k)
+        }
+        return ((S1.lo + 1) >> 1)
     }
     
     static func equal(_ x: UInt128, _ y: UInt128, _ pfpsf: inout Status) -> Bool {

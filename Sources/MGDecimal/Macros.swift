@@ -374,7 +374,7 @@ func srl128_short(_ hi:UInt64, _ lo:UInt64, _ c:Int) -> UInt128 {
     UInt128(w: [(hi << (64 - c)) + (lo >> c), hi >> c])
 }
 
-func __shr_128(_ Q: inout UInt128, _ A: inout UInt128, _ k:Int) {
+func __shr_128(_ Q: inout UInt128, _ A: UInt128, _ k:Int) {
      Q.lo  = A.lo >> k;
      Q.lo |= A.hi << (64-k);
      Q.hi  = A.hi >> k;
@@ -437,7 +437,7 @@ func __truncate (_ P:UInt128, _ extra_digits:Int) -> UInt64 {
     
     // now get P/10^extra_digits: shift Q_high right by M[extra_digits]-128
     let amount = bid_recip_scale[extra_digits]
-    __shr_128(&C128, &Q_high, amount)
+    __shr_128(&C128, Q_high, amount)
     
     let C64 = C128.lo
     return C64
@@ -516,6 +516,72 @@ func __mul_64x128_low(_ Ql:inout UInt128, _ A:UInt64, _ B:UInt128) {
     Ql.lo = ALBL.lo
     __add_128_64(&QM2, ALBH, ALBL.hi)
     Ql.hi = QM2.lo
+}
+
+func __mul_64x320_to_384(_ P:inout UInt384, _ A:UInt64, _ B:UInt384) {
+    var lP0 = UInt128(), lP1 = UInt128(), lP2 = UInt128(), lP3 = UInt128(), lP4 = UInt128()
+    var lC = UInt64()
+    __mul_64x64_to_128(&lP0, A, B.w[0])
+    __mul_64x64_to_128(&lP1, A, B.w[1])
+    __mul_64x64_to_128(&lP2, A, B.w[2])
+    __mul_64x64_to_128(&lP3, A, B.w[3])
+    __mul_64x64_to_128(&lP4, A, B.w[4])
+    P.w[0] = lP0.lo
+    __add_carry_out(&P.w[1],&lC,lP1.lo,lP0.hi)
+    __add_carry_in_out(&P.w[2],&lC,lP2.lo,lP1.hi,lC)
+    __add_carry_in_out(&P.w[3],&lC,lP3.lo,lP2.hi,lC)
+    __add_carry_in_out(&P.w[4],&lC,lP4.lo,lP3.hi,lC)
+    P.w[5] = lP4.hi + lC
+}
+
+func __mul_64x192_to_256(_ lP:inout UInt256, _ lA:UInt64, _ lB:UInt256) {
+    var lP0=UInt128(),lP1=UInt128(),lP2=UInt128()
+    var lC=UInt64()
+    __mul_64x64_to_128(&lP0, lA, lB.w[0])
+    __mul_64x64_to_128(&lP1, lA, lB.w[1])
+    __mul_64x64_to_128(&lP2, lA, lB.w[2])
+    lP.w[0] = lP0.lo
+    __add_carry_out(&lP.w[1],&lC,lP1.lo,lP0.hi)
+    __add_carry_in_out(&lP.w[2],&lC,lP2.lo,lP1.hi,lC)
+    lP.w[3] = lP2.hi + lC
+}
+
+func __mul_64x128_to_192(_ Q:inout UInt256, _ A:UInt64, _ B:UInt128) {
+    var ALBL = UInt128(), ALBH = UInt128(), QM2 = UInt128()
+    
+    __mul_64x64_to_128(&ALBH, A, B.hi)
+    __mul_64x64_to_128(&ALBL, A, B.lo)
+    
+    Q.w[0] = ALBL.lo
+    __add_128_64(&QM2, ALBH, ALBL.hi)
+    Q.w[1] = QM2.lo
+    Q.w[2] = QM2.hi
+}
+
+func __sub_borrow_in_out(_ S:inout UInt64, _ CY:inout UInt64, _ X:UInt64, _ Y:UInt64, _ CI:UInt64) {
+    let X0 = X
+    let X1 = X - CI
+    S = X1 - Y
+    CY = ((S>X1) || (X1>X0)) ? 1 : 0
+}
+
+// A*A
+// Full 128x128-bit product
+func __sqr128_to_256(_ P256:inout UInt256, _ A:UInt128) {
+var Qll = UInt128(), Qlh = UInt128(), Qhh = UInt128()
+var TMP_C1 = UInt64(), TMP_C2 = UInt64()
+                                                                 
+   __mul_64x64_to_128(&Qhh, A.hi, A.hi)
+   __mul_64x64_to_128(&Qlh, A.lo, A.hi)
+   Qhh.hi += (Qlh.hi>>63);
+   Qlh.hi = (Qlh.hi+Qlh.hi)|(Qlh.lo>>63);
+   Qlh.lo += Qlh.lo;
+   __mul_64x64_to_128(&Qll, A.lo, A.lo);
+                                                                 
+   __add_carry_out(&P256.w[1],&TMP_C1, Qlh.lo, Qll.hi);
+   P256.w[0] = Qll.lo;
+   __add_carry_in_out(&P256.w[2],&TMP_C2, Qlh.hi, Qhh.lo, TMP_C1);
+   P256.w[3] = Qhh.hi+TMP_C2;
 }
 
 /*****************************************************

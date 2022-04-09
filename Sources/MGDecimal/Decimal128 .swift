@@ -110,10 +110,6 @@ extension Decimal128 : DecimalFloatingPoint {
 //        Decimal64.frexp(x, &res, &exp)
 //        return Decimal64(raw: return_bid64(0, exp+Decimal64.exponentBias, 1))
     }
-
-    public func isTotallyOrdered(belowOrEqualTo other: Decimal128) -> Bool { true
-        /* TBD */
-    }
     
     static func _isZero(_ x:UInt128) -> Bool {
         return false
@@ -128,32 +124,34 @@ extension Decimal128 : DecimalFloatingPoint {
     public var dpd128: UInt128         { Decimal128.bid_to_dpd128(x) }
     public var int: Int                { Decimal128.bid128_to_int(x, &Decimal128.state) }
     public var double: Double          { Decimal128.bid128_to_double(x, Decimal128.rounding, &Decimal128.state) }
-    
-    public var isZero: Bool         { Decimal128._isZero(x) }
-    public var isSignMinus: Bool    { sign == .minus }
-    public var isInfinite: Bool     { ((x.hi & Decimal64.MASK_INF) == Decimal128.MASK_INF) && !isNaN }
-    public var isNaN: Bool          { (x.hi & Decimal64.MASK_NAN) == Decimal128.MASK_NAN }
-    public var isSignalingNaN: Bool { (x.hi & Decimal64.MASK_SNAN) == Decimal128.MASK_SNAN }
-    public var isFinite: Bool       { (x.hi & Decimal64.MASK_INF) != Decimal128.MASK_INF }
-    public var isNormal: Bool       { /*_isNormal*/ true }
-    public var isSubnormal: Bool    { /*_isSubnormal*/ false }
-    public var isCanonical: Bool    { /*_isCanonical*/ true }
-    public var isBIDFormat: Bool    { true }
-    public var ulp: Decimal128      { nextUp - self }
-    public var nextUp: Decimal128   { /* Decimal128(raw: Decimal128.bid128_nextup(x, &Decimal128.state))*/ self }
+    public var isZero: Bool            { Decimal128._isZero(x) }
+    public var isSignMinus: Bool       { sign == .minus }
+    public var isInfinite: Bool        { ((x.hi & Decimal64.MASK_INF) == Decimal128.MASK_INF) && !isNaN }
+    public var isNaN: Bool             { (x.hi & Decimal64.MASK_NAN) == Decimal128.MASK_NAN }
+    public var isSignalingNaN: Bool    { (x.hi & Decimal64.MASK_SNAN) == Decimal128.MASK_SNAN }
+    public var isFinite: Bool          { (x.hi & Decimal64.MASK_INF) != Decimal128.MASK_INF }
+    public var isNormal: Bool          { /*_isNormal*/ true }
+    public var isSubnormal: Bool       { /*_isSubnormal*/ false }
+    public var isCanonical: Bool       { /*_isCanonical*/ true }
+    public var isBIDFormat: Bool       { true }
+    public var ulp: Decimal128         { nextUp - self }
+    public var nextUp: Decimal128      { /* Decimal128(raw: Decimal128.bid128_nextup(x, &Decimal128.state))*/ self }
     
 }
 
 extension Decimal128 : FloatingPoint {
     
     public var exponent: Int {
-        /* TBD */ 0
+        var exp = 0, m = UInt128()
+        Decimal128.frexp(x, &m, &exp)
+        return exp
     }
     
     public var significand: Decimal128 {
-        /* TBD */ self
+        var exp = 0, m = UInt128()
+        Decimal128.frexp(x, &m, &exp)
+        return Decimal128(raw: m)
     }
-    
 
     public mutating func negate() { x.hi = x.hi ^ Decimal64.SIGN_MASK64 }
     
@@ -185,7 +183,7 @@ extension Decimal128 : FloatingPoint {
     mutating public func round(_ rule: FloatingPointRoundingRule) { assertionFailure("Unimplemented \(#function) function") }
     mutating public func formRemainder(dividingBy other: Decimal128) { assertionFailure("Unimplemented \(#function) function") }
     mutating public func formTruncatingRemainder(dividingBy other: Decimal128) { assertionFailure("Unimplemented \(#function) function") }
-    mutating public func formSquareRoot() { assertionFailure("Unimplemented \(#function) function") }
+    mutating public func formSquareRoot() { x = Decimal128.sqrt(x, Decimal128.rounding, &Decimal128.state) }
     mutating public func addProduct(_ lhs: Decimal128, _ rhs: Decimal128) { assertionFailure("Unimplemented \(#function) function") }
     
     public func distance(to other: Decimal128) -> Decimal128 { other - self }

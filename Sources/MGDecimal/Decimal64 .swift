@@ -100,7 +100,8 @@ public struct Decimal64 : CustomStringConvertible, ExpressibleByStringLiteral, E
     }
     
     public init(sign: FloatingPointSign, exponentBitPattern: UInt, significandDigits: [UInt8]) {
-        self.init()  /* TBD */
+        let mantissa = significandDigits.reduce(into: 0) { $0 = $0 * 10 + Int($1) }
+        self.init(sign: sign, exponent: Int(exponentBitPattern), significand: Decimal64(mantissa))
     }
     
     public var description: String { Decimal64.bid64_to_string(x) }
@@ -108,10 +109,6 @@ public struct Decimal64 : CustomStringConvertible, ExpressibleByStringLiteral, E
 }
 
 extension Decimal64 : AdditiveArithmetic, Comparable, SignedNumeric, Strideable, FloatingPoint {
-
-    public func isTotallyOrdered(belowOrEqualTo other: Decimal64) -> Bool { true
-        /* TBD */
-    }
 
     public mutating func negate() { x ^= Decimal64.SIGN_MASK64 }
     
@@ -133,6 +130,9 @@ extension Decimal64 : AdditiveArithmetic, Comparable, SignedNumeric, Strideable,
         x = Decimal64.bid64_fma(lhs.x, rhs.x, self.x, Decimal64.rounding, &Decimal64.state)
     }
 
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // MARK: - Strideable compliance
+    
     public func distance(to other: Decimal64) -> Decimal64 { other - self }
     public func advanced(by n: Decimal64) -> Decimal64 { self + n }
     

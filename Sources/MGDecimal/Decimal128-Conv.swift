@@ -26,12 +26,14 @@ extension Decimal128 {
     static let EXP_MAX_P1               = UInt64(0x6000_0000_0000_0000)
     static let SMALL_COEFF_MASK128      = UInt64(0x0001_ffff_ffff_ffff)
     static let LARGE_COEFF_MASK128      = UInt64(0x0000_7fff_ffff_ffff)
+    static let QUIET_MASK64             = UInt64(0xfdff_ffff_ffff_ffff)
     static let EXPONENT_MASK128         = 0x3fff
     static let LARGEST_BID128_HIGH      = UInt64(0x5fff_ed09_bead_87c0)
     static let LARGEST_BID128_LOW       = UInt64(0x378d_8e63_ffff_ffff)
     static let MASK_SPECIAL             = Decimal64.MASK_INF
     static let MASK_INF                 = Decimal64.MASK_INF
     static let INFINITY_MASK64          = Decimal64.MASK_INF
+    static let MASK_EXP2                = UInt64(0x1fff_8000_0000_0000)
     static let MASK_NAN                 = Decimal64.MASK_NAN
     static let MASK_SNAN                = Decimal64.MASK_SNAN
     static let MASK_SIGN                = Decimal64.MASK_SIGN
@@ -152,7 +154,7 @@ extension Decimal128 {
                 CX.lo = Qh.hi >> (amount - 64);
                 CX.hi = 0;
             } else {
-                __shr_128(&CX, &Qh, amount);
+                __shr_128(&CX, Qh, amount);
             }
             
             var Qh1 = UInt128()
@@ -322,7 +324,7 @@ extension Decimal128 {
             CQ.lo = Qh.hi >> (amount - 64)
             CQ.hi = 0
         } else {
-            __shr_128(&CQ, &Qh, amount)
+            __shr_128(&CQ, Qh, amount)
         }
         
         expon = 0
@@ -453,6 +455,28 @@ extension Decimal128 {
         pres.lo = coeff.lo
         let tmp = UInt64(expon) << 49
         pres.hi = sgn | tmp | coeff.hi
+        return pres
+    }
+    
+    //
+    //   No overflow/underflow checks
+    //
+    static func bid_get_BID128_fast(_ sgn:UInt64, _ expon:Int, _ coeff:UInt128) -> UInt128 {
+        var tmp:UInt64, expon = expon, coeff = coeff, pres = UInt128()
+        
+        // coeff==10^34?
+        if (coeff.hi == 0x0001ed09bead87c0 && coeff.lo == 0x378d8e6400000000) {
+            expon+=1
+            // set coefficient to 10^33
+            coeff.hi = 0x0000314dc6448d93
+            coeff.lo = 0x38c15b0a00000000
+        }
+        
+        pres.lo = coeff.lo
+        tmp = UInt64(expon)
+        tmp <<= 49
+        pres.hi = sgn | tmp | coeff.hi
+        
         return pres
     }
     
@@ -794,7 +818,7 @@ extension Decimal128 {
                 TP128 = bid_reciprocals10_128[18]
                 __mul_128x128_full(&Qh, &Ql, Tmp, TP128)
                 let amount = bid_recip_scale[18]
-                __shr_128(&Tmp, &Qh, amount)
+                __shr_128(&Tmp, Qh, amount)
                 res = (CX.hi & 0xfc00000000000000) | Tmp.lo
                 if (x.hi & Decimal64.SNAN_MASK64) == Decimal64.SNAN_MASK64 {   // sNaN
                     pfpsf.insert(.invalidOperation)
@@ -865,7 +889,7 @@ extension Decimal128 {
                 CX.lo = Qh.hi >> (amount - 64);
                 CX.hi = 0;
             } else {
-                __shr_128(&CX, &Qh, amount)
+                __shr_128(&CX, Qh, amount)
             }
             
             if rnd_mode != BID_ROUNDING_TO_NEAREST {
