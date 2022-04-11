@@ -23,6 +23,7 @@ extension Decimal128 {
     // Constant Definitions
     ///////////////////////////////////////
     static let EXP_P1                   = UInt64(0x0002_0000_0000_0000)
+    static let EXP_MIN                  = Decimal64.EXP_MIN
     static let EXP_MAX_P1               = UInt64(0x6000_0000_0000_0000)
     static let SMALL_COEFF_MASK128      = UInt64(0x0001_ffff_ffff_ffff)
     static let LARGE_COEFF_MASK128      = UInt64(0x0000_7fff_ffff_ffff)

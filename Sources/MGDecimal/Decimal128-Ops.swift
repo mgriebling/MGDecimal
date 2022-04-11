@@ -3710,16 +3710,287 @@ extension Decimal128 {
         return res
     }
     
+    /*****************************************************************************
+     *  BID128 nextup
+     ****************************************************************************/
+    static func nextup(_ x: UInt128, _ pfpsf: inout Status) -> UInt128 {
+        var C1 = UInt128(), res = UInt128(), exp = 0
+        var x_exp: UInt64, x = x
+        
+        //BID_SWAP128 (x);
+        // unpack the argument
+        let x_sign = x.hi & MASK_SIGN;    // 0 for positive, MASK_SIGN for negative
+        C1.hi = x.hi & MASK_COEFF;
+        C1.lo = x.lo;
+        
+        // check for NaN or Infinity
+        if ((x.hi & MASK_SPECIAL) == MASK_SPECIAL) {
+            // x is special
+            if ((x.hi & MASK_NAN) == MASK_NAN) {    // x is NAN
+                // if x = NaN, then res = Q (x)
+                // check first for non-canonical NaN payload
+                if (((x.hi & 0x00003fffffffffff) > 0x0000314dc6448d93) ||
+                    (((x.hi & 0x00003fffffffffff) == 0x0000314dc6448d93)
+                     && (x.lo > 0x38c15b09ffffffff))) {
+                    x.hi = x.hi & 0xffffc00000000000;
+                    x.lo = 0x0;
+                }
+                if ((x.hi & MASK_SNAN) == MASK_SNAN) {    // x is SNAN
+                    // set invalid flag
+                    pfpsf.insert(.invalidOperation)
+                    // return quiet (x)
+                    res.hi = x.hi & 0xfc003fffffffffff;    // clear out also G[6]-G[16]
+                    res.lo = x.lo;
+                } else {    // x is QNaN
+                    // return x
+                    res.hi = x.hi & 0xfc003fffffffffff;    // clear out G[6]-G[16]
+                    res.lo = x.lo;
+                }
+            } else {    // x is not NaN, so it must be infinity
+                if x_sign == 0 {    // x is +inf
+                    res.hi = 0x7800000000000000;    // +inf
+                    res.lo = 0x0000000000000000;
+                } else {    // x is -inf
+                    res.hi = 0xdfffed09bead87c0;    // -MAXFP = -999...99 * 10^emax
+                    res.lo = 0x378d8e63ffffffff;
+                }
+            }
+            return res
+        }
+        
+        // check for non-canonical values (treated as zero)
+        if ((x.hi & 0x6000000000000000) == 0x6000000000000000) {    // G0_G1=11
+            // non-canonical
+            x_exp = (x.hi << 2) & MASK_EXP;    // biased and shifted left 49 bits
+            C1.hi = 0;    // significand high
+            C1.lo = 0;    // significand low
+        } else {    // G0_G1 != 11
+            x_exp = x.hi & MASK_EXP;    // biased and shifted left 49 bits
+            if (C1.hi > 0x0001ed09bead87c0 ||
+                (C1.hi == 0x0001ed09bead87c0
+                 && C1.lo > 0x378d8e63ffffffff)) {
+                // x is non-canonical if coefficient is larger than 10^34 -1
+                C1.hi = 0;
+                C1.lo = 0;
+            } else {    // canonical
+                // nothing to do
+            }
+        }
+        
+        if ((C1.hi == 0x0) && (C1.lo == 0x0)) {
+            // x is +/-0
+            res.hi = 0x0000000000000000;    // +1 * 10^emin
+            res.lo = 0x0000000000000001;
+        } else {    // x is not special and is not zero
+            if (x.hi == 0x5fffed09bead87c0
+                && x.lo == 0x378d8e63ffffffff) {
+                // x = +MAXFP = 999...99 * 10^emax
+                res.hi = 0x7800000000000000;    // +inf
+                res.lo = 0x0000000000000000;
+            } else if (x.hi == 0x8000000000000000
+                       && x.lo == 0x0000000000000001) {
+                // x = -MINFP = 1...99 * 10^emin
+                res.hi = 0x8000000000000000;    // -0
+                res.lo = 0x0000000000000000;
+            } else {    // -MAXFP <= x <= -MINFP - 1 ulp OR MINFP <= x <= MAXFP - 1 ulp
+                // can add/subtract 1 ulp to the significand
+                
+                // Note: we could check here if x >= 10^34 to speed up the case q1 = 34
+                // q1 = nr. of decimal digits in x
+                // determine first the nr. of bits in x
+                let q1 = digitsIn(C1.hi, lo: C1.lo)
+//                if (C1.hi == 0) {
+//                    if (C1.lo >= 0x0020000000000000) {    // x >= 2^53
+//                        // split the 64-bit value in two 32-bit halves to avoid rnd errors
+//                        if (C1.lo >= 0x0000000100000000) {    // x >= 2^32
+//                            tmp1.d = (double) (C1.lo >> 32);    // exact conversion
+//                            x_nr_bits =
+//                            33 + ((((unsigned int) (tmp1.ui64 >> 52)) & 0x7ff) -
+//                                  0x3ff);
+//                        } else {    // x < 2^32
+//                            tmp1.d = (double) (C1.lo);    // exact conversion
+//                            x_nr_bits =
+//                            1 + ((((unsigned int) (tmp1.ui64 >> 52)) & 0x7ff) -
+//                                 0x3ff);
+//                        }
+//                    } else {    // if x < 2^53
+//                        tmp1.d = (double) C1.lo;    // exact conversion
+//                        x_nr_bits =
+//                        1 + ((((unsigned int) (tmp1.ui64 >> 52)) & 0x7ff) - 0x3ff);
+//                    }
+//                } else {    // C1.hi != 0 => nr. bits = 64 + nr_bits (C1.hi)
+//                    tmp1.d = (double) C1.hi;    // exact conversion
+//                    x_nr_bits =
+//                    65 + ((((unsigned int) (tmp1.ui64 >> 52)) & 0x7ff) - 0x3ff);
+//                }
+//                q1 = bid_nr_digits[x_nr_bits - 1].digits;
+//                if (q1 == 0) {
+//                    q1 = bid_nr_digits[x_nr_bits - 1].digits1;
+//                    if (C1.hi > bid_nr_digits[x_nr_bits - 1].threshold_hi
+//                        || (C1.hi == bid_nr_digits[x_nr_bits - 1].threshold_hi
+//                            && C1.lo >= bid_nr_digits[x_nr_bits - 1].threshold_lo))
+//                        q1++;
+//                }
+                // if q1 < P34 then pad the significand with zeros
+                var ind = 0
+                if (q1 < P34) {
+                    exp = Int(x_exp >> 49) - 6176;
+                    if (exp + 6176 > P34 - q1) {
+                        ind = P34 - q1;    // 1 <= ind <= P34 - 1
+                        // pad with P34 - q1 zeros, until exponent = emin
+                        // C1 = C1 * 10^ind
+                        if (q1 <= 19) {    // 64-bit C1
+                            if (ind <= 19) {    // 64-bit 10^ind and 64-bit C1
+                                __mul_64x64_to_128MACH (&C1, C1.lo, bid_ten2k64[ind]);
+                            } else {    // 128-bit 10^ind and 64-bit C1
+                                __mul_128x64_to_128 (&C1, C1.lo, bid_ten2k128[ind - 20]);
+                            }
+                        } else {    // C1 is (most likely) 128-bit
+                            if (ind <= 14) {    // 64-bit 10^ind and 128-bit C1 (most likely)
+                                __mul_128x64_to_128 (&C1, bid_ten2k64[ind], C1);
+                            } else if (ind <= 19) {    // 64-bit 10^ind and 64-bit C1 (q1 <= 19)
+                                __mul_64x64_to_128MACH (&C1, C1.lo, bid_ten2k64[ind]);
+                            } else {    // 128-bit 10^ind and 64-bit C1 (C1 must be 64-bit)
+                                __mul_128x64_to_128 (&C1, C1.lo, bid_ten2k128[ind - 20]);
+                            }
+                        }
+                        x_exp = x_exp - (UInt64(ind) << 49);
+                    } else {    // pad with zeros until the exponent reaches emin
+                        ind = exp + 6176;
+                        // C1 = C1 * 10^ind
+                        if (ind <= 19) {    // 1 <= P34 - q1 <= 19 <=> 15 <= q1 <= 33
+                            if (q1 <= 19) {    // 64-bit C1, 64-bit 10^ind
+                                __mul_64x64_to_128MACH (&C1, C1.lo, bid_ten2k64[ind]);
+                            } else {    // 20 <= q1 <= 33 => 128-bit C1, 64-bit 10^ind
+                                __mul_128x64_to_128 (&C1, bid_ten2k64[ind], C1);
+                            }
+                        } else {    // if 20 <= P34 - q1 <= 33 <=> 1 <= q1 <= 14 =>
+                            // 64-bit C1, 128-bit 10^ind
+                            __mul_128x64_to_128 (&C1, C1.lo, bid_ten2k128[ind - 20]);
+                        }
+                        x_exp = EXP_MIN;
+                    }
+                }
+                if x_sign == 0 {    // x > 0
+                    // add 1 ulp (add 1 to the significand)
+                    C1.lo &+= 1
+                    if C1.lo == 0 { C1.hi+=1 }
+                    if (C1.hi == 0x0001ed09bead87c0 && C1.lo == 0x378d8e6400000000) {    // if  C1 = 10^34
+                        C1.hi = 0x0000314dc6448d93;    // C1 = 10^33
+                        C1.lo = 0x38c15b0a00000000;
+                        x_exp = x_exp + EXP_P1;
+                    }
+                } else {    // x < 0
+                    // subtract 1 ulp (subtract 1 from the significand)
+                    C1.lo &-= 1
+                    if C1.lo == 0xffffffffffffffff { C1.hi-=1 }
+                    if (x_exp != 0 && C1.hi == 0x0000314dc6448d93 && C1.lo == 0x38c15b09ffffffff) {    // if  C1 = 10^33 - 1
+                        C1.hi = 0x0001ed09bead87c0;    // C1 = 10^34 - 1
+                        C1.lo = 0x378d8e63ffffffff;
+                        x_exp = x_exp - EXP_P1;
+                    }
+                }
+                // assemble the result
+                res.hi = x_sign | x_exp | C1.hi;
+                res.lo = C1.lo;
+            }    // end -MAXFP <= x <= -MINFP - 1 ulp OR MINFP <= x <= MAXFP - 1 ulp
+        }    // end x is not special and is not zero
+        return (res);
+    }
+    
     static func fma(_ x: UInt128, _ y: UInt128, _ z: UInt128, _ rnd_mode: Rounding, _ pfpsf: inout Status) -> UInt128 {
         return 0
     }
     
     static func mul(_ x:UInt128, _ y:UInt128, _ rnd_mode: Rounding, _ pfpsf: inout Status) -> UInt128 {
-        return x
+        var  z = UInt128(upper: 0x5ffe000000000000, lower: 0x0000000000000000)
+        var res = UInt128(upper: 0xbaddbaddbaddbadd, lower: 0xbaddbaddbaddbadd)
+        var x_exp, y_exp, x_sign, y_sign:UInt64
+        var C1 = UInt128(), C2 = UInt128(), x = x, y = y
+        
+        BID_SWAP128(&x)
+        BID_SWAP128(&y)
+        
+        // skip cases where at least one operand is NaN or infinity
+        if (!(((x.hi & MASK_NAN) == MASK_NAN) ||
+              ((y.hi & MASK_NAN) == MASK_NAN) ||
+              ((x.hi & MASK_ANY_INF) == MASK_INF) ||
+              ((y.hi & MASK_ANY_INF) == MASK_INF))) {
+            // x, y are 0 or f but not inf or NaN => unpack the arguments and check
+            // for non-canonical values
+            
+            x_sign = x.hi & MASK_SIGN;    // 0 for positive, MASK_SIGN for negative
+            C1.hi = x.hi & MASK_COEFF;
+            C1.lo = x.lo;
+            // check for non-canonical values - treated as zero
+            if ((x.hi & 0x6000000000000000) == 0x6000000000000000) {
+                // G0_G1=11 => non-canonical
+                x_exp = (x.hi << 2) & MASK_EXP;    // biased and shifted left 49 bits
+                C1.hi = 0;    // significand high
+                C1.lo = 0;    // significand low
+            } else {    // G0_G1 != 11
+                x_exp = x.hi & MASK_EXP;    // biased and shifted left 49 bits
+                if (C1.hi > 0x0001ed09bead87c0 ||
+                    (C1.hi == 0x0001ed09bead87c0 &&
+                     C1.lo > 0x378d8e63ffffffff)) {
+                    // x is non-canonical if coefficient is larger than 10^34 -1
+                    C1.hi = 0;
+                    C1.lo = 0;
+                } else {    // canonical
+                    // nothing
+                }
+            }
+            y_sign = y.hi & MASK_SIGN;    // 0 for positive, MASK_SIGN for negative
+            C2.hi = y.hi & MASK_COEFF;
+            C2.lo = y.lo;
+            // check for non-canonical values - treated as zero
+            if ((y.hi & 0x6000000000000000) == 0x6000000000000000) {
+                // G0_G1=11 => non-canonical
+                y_exp = (y.hi << 2) & MASK_EXP;    // biased and shifted left 49 bits
+                C2.hi = 0;    // significand high
+                C2.lo = 0;    // significand low
+            } else {    // G0_G1 != 11
+                y_exp = y.hi & MASK_EXP;    // biased and shifted left 49 bits
+                if (C2.hi > 0x0001ed09bead87c0 ||
+                    (C2.hi == 0x0001ed09bead87c0 &&
+                     C2.lo > 0x378d8e63ffffffff)) {
+                    // y is non-canonical if coefficient is larger than 10^34 -1
+                    C2.hi = 0;
+                    C2.lo = 0;
+                } else {    // canonical
+                    // nothing
+                }
+            }
+            
+            let p_sign = x_sign ^ y_sign;    // sign of the product
+            var p_exp:UInt64
+            let true_p_exp = Int(x_exp >> 49) - 6176 + Int(y_exp >> 49) - 6176;
+            // true_p_exp, p_exp are used only for 0 * 0, 0 * f, or f * 0
+            if (true_p_exp < -6176) {
+                p_exp = 0;    // cannot be less than EXP_MIN
+            } else if (true_p_exp > 6111) {
+                p_exp = UInt64(6111 + 6176) << 49;    // cannot be more than EXP_MAX
+            } else {
+                p_exp = UInt64(true_p_exp + 6176) << 49;
+            }
+            
+            if ((C1.hi == 0x0 && C1.lo == 0x0) || (C2.hi == 0x0 && C2.lo == 0x0)) {
+                // x = 0 or y = 0
+                // the result is 0
+                res.hi = p_sign | p_exp;    // preferred exponent in [EXP_MIN, EXP_MAX]
+                res.lo = 0x0;
+                BID_SWAP128(&res);
+                return res
+            }    // else continue
+        }
+        
+        BID_SWAP128(&x);
+        BID_SWAP128(&y);
+        BID_SWAP128(&z);
+        
+        // swap x and y - ensure that a NaN in x has 'higher precedence' than one in y
+        res = fma(y, x, z, rnd_mode, &pfpsf)
+        return (res);
     }
-    
-    static func nextup(_ x: UInt128, _ pfpsf: inout Status) -> UInt128 {
-        return 0
-    }
-    
+
 }

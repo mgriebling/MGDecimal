@@ -335,7 +335,8 @@ extension Decimal128 : FloatingPoint {
         x = Decimal128.rem(self.x, other.x, Decimal128.rounding, &Decimal128.state)
     }
     mutating public func formTruncatingRemainder(dividingBy other: Decimal128) {
-        assertionFailure("Unimplemented \(#function) function")
+        let q = (self/other).rounded(.towardZero)
+        self -= q * other
     }
     mutating public func formSquareRoot() { x = Decimal128.sqrt(x, Decimal128.rounding, &Decimal128.state) }
     mutating public func addProduct(_ lhs: Decimal128, _ rhs: Decimal128) {
