@@ -955,15 +955,16 @@ extension Decimal32 {
         
         // q = nr. of decimal digits in x (1 <= q <= 7)
         //  determine first the nr. of bits in x
-        let tmp1 = Float(C1) // exact conversion
-        let x_nr_bits = 1 + Int((tmp1.bitPattern >> 23) & 0xff) - 0x7f
-        var q = Int(bid_nr_digits[x_nr_bits - 1].digits)
-        if q == 0 {
-            q = Int(bid_nr_digits[x_nr_bits - 1].digits1)
-            if C1 >= bid_nr_digits[x_nr_bits - 1].threshold_lo {
-                q+=1
-            }
-        }
+        let q = digitsIn(C1)
+//        let tmp1 = Float(C1) // exact conversion
+//        let x_nr_bits = 1 + Int((tmp1.bitPattern >> 23) & 0xff) - 0x7f
+//        var q = Int(bid_nr_digits[x_nr_bits - 1].digits)
+//        if q == 0 {
+//            q = Int(bid_nr_digits[x_nr_bits - 1].digits1)
+//            if C1 >= bid_nr_digits[x_nr_bits - 1].threshold_lo {
+//                q+=1
+//            }
+//        }
         let exp = Int(x_exp) - EXPONENT_BIAS // unbiased exponent
         
         if (q + exp) > 20 { // x >= 10^20 ~= 2^66.45... (cannot fit in 64 bits)

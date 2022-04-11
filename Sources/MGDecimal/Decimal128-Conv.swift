@@ -32,6 +32,7 @@ extension Decimal128 {
     static let LARGEST_BID128_LOW       = UInt64(0x378d_8e63_ffff_ffff)
     static let MASK_SPECIAL             = Decimal64.MASK_INF
     static let MASK_INF                 = Decimal64.MASK_INF
+    static let MASK_ANY_INF             = Decimal64.MASK_ANY_INF
     static let INFINITY_MASK64          = Decimal64.MASK_INF
     static let MASK_EXP2                = UInt64(0x1fff_8000_0000_0000)
     static let MASK_NAN                 = Decimal64.MASK_NAN
@@ -39,17 +40,24 @@ extension Decimal128 {
     static let MASK_SIGN                = Decimal64.MASK_SIGN
     static let MASK_COEFF               = UInt64(0x0001_ffff_ffff_ffff)
     static let SPECIAL_ENCODING_MASK64  = Decimal64.SPECIAL_ENCODING_MASK64
+    static let LARGE_COEFF_HIGH_BIT64   = Decimal64.LARGE_COEFF_HIGH_BIT64
     static let MASK_STEERING_BITS       = Decimal64.MASK_STEERING_BITS
     static let MASK_EXP                 = UInt64(0x7ffe_0000_0000_0000)
+    static let BINARY_EXPONENT_BIAS     = Decimal64.BINARY_EXPONENT_BIAS
     
+    // 10^33 - 1 = 0x0000314dc6448d93_38c15b09ffffffff
+    // 10^34 - 1 = 0x0001ed09bead87c0_378d8e63ffffffff
+    static let Ten33M1 = UInt128(upper: 0x0000_314d_c644_8d93, lower: 0x38c1_5b09_ffff_ffff)
+    static let Ten34M1 = UInt128(upper: 0x0001_ed09_bead_87c0, lower: 0x378d_8e63_ffff_ffff)
+
     /*
      * Takes a BID32 as input and converts it to a BID128 and returns it.
      */
     static func bid32_to_bid128(_ x:UInt32, _ pfpsf: inout Status) -> UInt128 {
         var sign_x = UInt32(), coefficient_x = UInt32(), exponent_x = 0, res = UInt128()
         if !Decimal32.unpack_BID32(&sign_x, &exponent_x, &coefficient_x, x) {
-            if (x & 0x78000000) == 0x78000000 {
-                if (x & 0x7e000000) == 0x7e000000 {   // sNaN
+            if (x & 0x7800_0000) == 0x7800_0000 {
+                if (x & 0x7e00_0000) == 0x7e00_0000 {   // sNaN
                     pfpsf.insert(.invalidOperation)
                 }
                 res.lo = UInt64((coefficient_x & 0x000fffff))
@@ -231,13 +239,13 @@ extension Decimal128 {
         psign_x = x.hi & Decimal64.SIGN_MASK64
         
         // special encodings
-        if ((x.hi & Decimal64.INFINITY_MASK64) >= Decimal64.SPECIAL_ENCODING_MASK64) {
-            if ((x.hi & Decimal64.INFINITY_MASK64) < Decimal64.INFINITY_MASK64) {
+        if (x.hi & Decimal64.INFINITY_MASK64) >= Decimal64.SPECIAL_ENCODING_MASK64 {
+            if (x.hi & Decimal64.INFINITY_MASK64) < Decimal64.INFINITY_MASK64 {
                 // non-canonical input
-                pcoefficient_x.lo = 0;
-                pcoefficient_x.hi = 0;
-                let ex = (x.hi) >> 47;
-                pexponent_x = Int(ex) & EXPONENT_MASK128;
+                pcoefficient_x.lo = 0
+                pcoefficient_x.hi = 0
+                let ex = x.hi >> 47
+                pexponent_x = Int(ex) & EXPONENT_MASK128
                 return false
             }
             // 10^33
@@ -405,7 +413,7 @@ extension Decimal128 {
         var coeff = coeff
         
         // coeff==10^34?
-        if coeff.hi == 0x0001ed09bead87c0 && coeff.lo == 0x378d8e6400000000 {
+        if coeff.hi == Ten34M1.hi && coeff.lo == 0x378d8e6400000000 {
             expon+=1
             // set coefficient to 10^33
             coeff.hi = 0x0000314dc6448d93
@@ -465,7 +473,7 @@ extension Decimal128 {
         var tmp:UInt64, expon = expon, coeff = coeff, pres = UInt128()
         
         // coeff==10^34?
-        if (coeff.hi == 0x0001ed09bead87c0 && coeff.lo == 0x378d8e6400000000) {
+        if (coeff.hi == Ten34M1.hi && coeff.lo == 0x378d8e6400000000) {
             expon+=1
             // set coefficient to 10^33
             coeff.hi = 0x0000314dc6448d93
@@ -1164,39 +1172,40 @@ extension Decimal128 {
             }
         }
         // check for non-canonical values (after the check for special values)
-        if ((C1.hi > 0x0001ed09bead87c0) || (C1.hi == 0x0001ed09bead87c0 && (C1.lo > 0x378d8e63ffffffff))
-            || ((x.hi & 0x6000000000000000) == 0x6000000000000000)) {
-            return 0x0000000000000000
+        if ((C1.hi > Ten34M1.hi) || (C1.hi == Ten34M1.hi && (C1.lo > Ten34M1.lo))
+            || ((x.hi & MASK_STEERING_BITS) == MASK_STEERING_BITS)) {
+            return 0x0
         } else if (C1.hi == 0) && (C1.lo == 0) {
             // x is 0
-            return 0x0000000000000000
+            return 0x0
         } else {    // x is not special and is not zero
             
             // q = nr. of decimal digits in x
             //  determine first the nr. of bits in x
-            var x_nr_bits = 0, tmp1:Double
-            if (C1.hi == 0) {
-                if (C1.lo >= 0x0020000000000000) {    // x >= 2^53
-                    // split the 64-bit value in two 32-bit halves to avoid rounding errors
-                    tmp1 = Double(C1.lo >> 32)    // exact conversion
-                    x_nr_bits = 33 + ((Int(tmp1.bitPattern >> 52)) & 0x7ff) - 0x3ff
-                } else {    // if x < 2^53
-                    tmp1 = Double(C1.lo)    // exact conversion
-                    x_nr_bits = 1 + ((Int(tmp1.bitPattern >> 52)) & 0x7ff) - 0x3ff
-                }
-            } else {    // C1.hi != 0 => nr. bits = 64 + nr_bits (C1.hi)
-                tmp1 = Double(C1.hi)    // exact conversion
-                x_nr_bits = 65 + ((Int(tmp1.bitPattern >> 52)) & 0x7ff) - 0x3ff
-            }
-            var q = Int(bid_nr_digits[x_nr_bits - 1].digits)
-            if q == 0 {
-                q = Int(bid_nr_digits[x_nr_bits - 1].digits1)
-                if (C1.hi > bid_nr_digits[x_nr_bits - 1].threshold_hi
-                    || (C1.hi == bid_nr_digits[x_nr_bits - 1].threshold_hi
-                        && C1.lo >= bid_nr_digits[x_nr_bits - 1].threshold_lo)) {
-                    q+=1
-                }
-            }
+            let q = digitsIn(C1.hi, lo: C1.lo)
+//            var x_nr_bits = 0, tmp1:Double
+//            if (C1.hi == 0) {
+//                if (C1.lo >= 0x0020000000000000) {    // x >= 2^53
+//                    // split the 64-bit value in two 32-bit halves to avoid rounding errors
+//                    tmp1 = Double(C1.lo >> 32)    // exact conversion
+//                    x_nr_bits = 33 + ((Int(tmp1.bitPattern >> 52)) & 0x7ff) - 0x3ff
+//                } else {    // if x < 2^53
+//                    tmp1 = Double(C1.lo)    // exact conversion
+//                    x_nr_bits = 1 + ((Int(tmp1.bitPattern >> 52)) & 0x7ff) - 0x3ff
+//                }
+//            } else {    // C1.hi != 0 => nr. bits = 64 + nr_bits (C1.hi)
+//                tmp1 = Double(C1.hi)    // exact conversion
+//                x_nr_bits = 65 + ((Int(tmp1.bitPattern >> 52)) & 0x7ff) - 0x3ff
+//            }
+//            var q = Int(bid_nr_digits[x_nr_bits - 1].digits)
+//            if q == 0 {
+//                q = Int(bid_nr_digits[x_nr_bits - 1].digits1)
+//                if (C1.hi > bid_nr_digits[x_nr_bits - 1].threshold_hi
+//                    || (C1.hi == bid_nr_digits[x_nr_bits - 1].threshold_hi
+//                        && C1.lo >= bid_nr_digits[x_nr_bits - 1].threshold_lo)) {
+//                    q+=1
+//                }
+//            }
             let exp = Int(x_exp >> 49) - 6176
             if (q + exp) > 19 {    // x >= 10^19 ~= 2^63.11... (cannot fit in BID_SINT64)
                 // set invalid flag
@@ -1237,8 +1246,8 @@ extension Decimal128 {
                     // too large if c(0)c(1)...c(18).c(19)...c(q-1) >= 2^63
                     // <=> if 0.c(0)c(1)...c(q-1) * 10^20 >= 5*2^64, 1<=q<=34
                     // <=> if 0.c(0)c(1)...c(q-1) * 10^20 >= 0x50000000000000000, 1<=q<=34
-                    C.hi = 0x0000000000000005;
-                    C.lo = 0x0000000000000000;
+                    C.hi = 0x5
+                    C.lo = 0x0
                     if (q <= 19) {    // 1 <= q <= 19 => 1 <= 20-q <= 19 =>
                         // 10^(20-q) is 64-bit, and so is C1
                         __mul_64x64_to_128MACH(&C1, C1.lo, bid_ten2k64[20 - q]);
@@ -1327,6 +1336,53 @@ extension Decimal128 {
         }
         return res
     }
-
+    
+    //
+    //  BID128 unpack, input pased by reference
+    //
+    static func unpack_BID128(_ psign_x:inout UInt64, _ pexponent_x:inout Int, _ pcoefficient_x:inout UInt128, _ px:UInt128) -> Bool {
+        psign_x = px.hi & MASK_SIGN // 0x8000000000000000
+        
+        // special encodings
+        var ex:UInt64, coeff=UInt128()
+        if (px.hi & INFINITY_MASK64) >= SPECIAL_ENCODING_MASK64 {
+            if (px.hi & INFINITY_MASK64) < INFINITY_MASK64 {
+                // non-canonical input
+                pcoefficient_x.lo = 0
+                pcoefficient_x.hi = 0
+                ex = px.hi >> 47
+                pexponent_x = Int(ex) & EXPONENT_MASK128
+                return false
+            }
+            
+            // 10^33
+            let T33 = bid_power10_table_128[33]
+            coeff.lo = px.lo
+            coeff.hi = px.hi & LARGE_COEFF_MASK128
+            pcoefficient_x = px
+            if __unsigned_compare_ge_128 (coeff, T33) {    // non-canonical
+                pcoefficient_x.hi &= (~LARGE_COEFF_MASK128)
+                pcoefficient_x.lo = 0
+            }
+            pexponent_x = 0
+            return false    // NaN or Infinity
+        }
+        
+        coeff.lo = px.lo
+        coeff.hi = px.hi & SMALL_COEFF_MASK128
+        
+        // 10^34
+        let T34 = bid_power10_table_128[34]
+        
+        // check for non-canonical values
+        if __unsigned_compare_ge_128(coeff, T34) {
+            coeff.lo = 0; coeff.hi = 0
+        }
+        
+        pcoefficient_x = coeff
+        ex = px.hi >> 49
+        pexponent_x = Int(ex) & EXPONENT_MASK128
+        return (coeff.lo | coeff.hi) != 0
+    }
 
 }

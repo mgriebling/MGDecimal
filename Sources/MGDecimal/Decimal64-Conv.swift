@@ -1171,23 +1171,24 @@ extension Decimal64 {
         
         // q = nr. of decimal digits in x (1 <= q <= 54)
         //  determine first the nr. of bits in x
-        var x_nr_bits:Int
-        if C1 >= 0x0020000000000000 {    // x >= 2^53
-            // split the 64-bit value in two 32-bit halves to avoid rounding errors
-            let tmp1 = Double(C1 >> 32);   // exact conversion
-            x_nr_bits = 33 + (((Int(tmp1.bitPattern >> 52)) & 0x7ff) - 0x3ff)
-        } else {    // if x < 2^53
-            let tmp1 = Double(C1)    // exact conversion
-            x_nr_bits = 1 + (((Int(tmp1.bitPattern >> 52)) & 0x7ff) - 0x3ff)
-        }
-        var q = Int(bid_nr_digits[x_nr_bits - 1].digits)
-        if q == 0 {
-            q = Int(bid_nr_digits[x_nr_bits - 1].digits1)
-            if (C1 >= bid_nr_digits[x_nr_bits - 1].threshold_lo) {
-                q+=1
-            }
-        }
-        let exp = Int(x_exp) - 398;    // unbiased exponent
+        let q = digitsIn(C1)
+//        var x_nr_bits:Int
+//        if C1 >= 0x0020000000000000 {    // x >= 2^53
+//            // split the 64-bit value in two 32-bit halves to avoid rounding errors
+//            let tmp1 = Double(C1 >> 32);   // exact conversion
+//            x_nr_bits = 33 + (((Int(tmp1.bitPattern >> 52)) & 0x7ff) - 0x3ff)
+//        } else {    // if x < 2^53
+//            let tmp1 = Double(C1)    // exact conversion
+//            x_nr_bits = 1 + (((Int(tmp1.bitPattern >> 52)) & 0x7ff) - 0x3ff)
+//        }
+//        var q = Int(bid_nr_digits[x_nr_bits - 1].digits)
+//        if q == 0 {
+//            q = Int(bid_nr_digits[x_nr_bits - 1].digits1)
+//            if (C1 >= bid_nr_digits[x_nr_bits - 1].threshold_lo) {
+//                q+=1
+//            }
+//        }
+        let exp = Int(x_exp) - 398    // unbiased exponent
         
         if ((q + exp) > 19) {    // x >= 10^19 ~= 2^63.11... (cannot fit in BID_SINT64)
             // set invalid flag

@@ -19,6 +19,7 @@ let BID_ROUNDING_TIES_AWAY = Rounding.toNearestOrAwayFromZero
 struct UInt512 { var w = [UInt64](repeating: 0, count: 8) }
 struct UInt384 { var w = [UInt64](repeating: 0, count: 6) }
 struct UInt256 { var w = [UInt64](repeating: 0, count: 4) }
+struct UInt192 { var w = [UInt64](repeating: 0, count: 3) }
 
 var isBigEndian: Bool { let one=1; return one == one.bigEndian }
 
