@@ -481,6 +481,33 @@ func __sub_128_64(_ R128:inout UInt128, _ A128:UInt128, _ B64:UInt64) {
     R128.lo = A128.lo - B64
 }
 
+// might simplify by calculating just QM2.w[0]
+func __mul_64x128_to_128(_ Ql:inout UInt128, _ A:UInt64, _ B:UInt128) {
+    var ALBL = UInt128(), ALBH = UInt128(), QM2 = UInt128()
+    __mul_64x64_to_128(&ALBH, A, B.hi)
+    __mul_64x64_to_128(&ALBL, A, B.lo)
+    Ql.lo = ALBL.lo
+    __add_128_64(&QM2, ALBH, ALBL.hi)
+    Ql.hi = QM2.lo
+}
+
+func __mul_192x192_to_384(_ P:inout UInt384, _ A:UInt192, _ B:UInt192) {
+    var P0=UInt256(),P1=UInt256(),P2=UInt256()
+    var CY:UInt64=0
+    __mul_64x192_to_256(&P0, A.w[0], B)
+    __mul_64x192_to_256(&P1, A.w[1], B)
+    __mul_64x192_to_256(&P2, A.w[2], B)
+    P.w[0] = P0.w[0];
+    __add_carry_out(&P.w[1],&CY,P1.w[0],P0.w[1]);
+    __add_carry_in_out(&P.w[2],&CY,P1.w[1],P0.w[2],CY);
+    __add_carry_in_out(&P.w[3],&CY,P1.w[2],P0.w[3],CY);
+    P.w[4] = P1.w[3] + CY;
+    __add_carry_out(&P.w[2],&CY,P2.w[0],(P).w[2]);
+    __add_carry_in_out(&P.w[3],&CY,P2.w[1],(P).w[3],CY);
+    __add_carry_in_out(&P.w[4],&CY,P2.w[2],(P).w[4],CY);
+    P.w[5] = P2.w[3] + CY;
+}
+
 func __mul_64x256_to_320(_ P:inout UInt384, _ A:UInt64, _ B:UInt256) {
     var lP0=UInt128(), lP1=UInt128(), lP2=UInt128(), lP3=UInt128()
     var lC:UInt64=0
@@ -535,7 +562,7 @@ func __mul_64x320_to_384(_ P:inout UInt384, _ A:UInt64, _ B:UInt384) {
     P.w[5] = lP4.hi + lC
 }
 
-func __mul_64x192_to_256(_ lP:inout UInt256, _ lA:UInt64, _ lB:UInt256) {
+func __mul_64x192_to_256(_ lP:inout UInt256, _ lA:UInt64, _ lB:UInt192) {
     var lP0=UInt128(),lP1=UInt128(),lP2=UInt128()
     var lC=UInt64()
     __mul_64x64_to_128(&lP0, lA, lB.w[0])
@@ -547,7 +574,7 @@ func __mul_64x192_to_256(_ lP:inout UInt256, _ lA:UInt64, _ lB:UInt256) {
     lP.w[3] = lP2.hi + lC
 }
 
-func __mul_64x128_to_192(_ Q:inout UInt256, _ A:UInt64, _ B:UInt128) {
+func __mul_64x128_to_192(_ Q:inout UInt192, _ A:UInt64, _ B:UInt128) {
     var ALBL = UInt128(), ALBH = UInt128(), QM2 = UInt128()
     
     __mul_64x64_to_128(&ALBH, A, B.hi)

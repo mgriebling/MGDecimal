@@ -14,6 +14,8 @@ extension Decimal128 {
     ////////////////////////////////////////
     static let MAX_EXPON                 = 12287
     static let EXPONENT_BIAS             = 6176
+    static let expmin                    = -6176   // min unbiased exponent
+    static let expmax                    = 6111    // max unbiased exponent
     static let MAX_FORMAT_DIGITS_128     = 34
     static let P34                       = MAX_FORMAT_DIGITS_128
     static let MAX_STRING_DIGITS_128     = 100
