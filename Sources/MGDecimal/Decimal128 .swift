@@ -57,7 +57,7 @@ public struct Decimal128 : CustomStringConvertible, ExpressibleByStringLiteral, 
     public init<Source>(_ value: Source) where Source : BinaryInteger { self.init(Int(value)) }
     
     public init?<T>(exactly source: T) where T : BinaryInteger {
-        self.init(Int(source))  // FIX ME
+        self.init(source)  // FIX ME
     }
     
     public init(sign: FloatingPointSign, exponentBitPattern: UInt, significandDigits: [UInt8]) {

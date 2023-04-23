@@ -26,9 +26,10 @@ var isBigEndian: Bool { let one=1; return one == one.bigEndian }
 func BID_SWAP128(_ x: inout UInt128) {
     if isBigEndian {
         // swap 64-bit words
-        let sw = x.hi
-        x.hi = x.lo
-        x.lo = sw
+        swap(&x.hi, &x.lo)
+//        let sw = x.hi
+//        x.hi = x.lo
+//        x.lo = sw
     }
 }
 
@@ -920,10 +921,10 @@ func __sub_128_128(_ R128:inout UInt128, _ A128:UInt128, _ B128:UInt128) {
 // assume no carry-out
 func __add_128_128(_ R128:inout UInt128, _ A128:UInt128, _ B128:UInt128) {
     var Q128 = UInt128()
-    Q128.hi = A128.hi + B128.hi
+    Q128.hi = A128.hi &+ B128.hi
     Q128.lo = B128.lo &+ A128.lo
     if Q128.lo < B128.lo {
-        Q128.hi += 1
+        Q128.hi &+= 1
     }
     R128 = Q128
 }

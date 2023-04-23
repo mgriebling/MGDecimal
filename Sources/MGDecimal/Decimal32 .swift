@@ -139,6 +139,7 @@ extension Decimal32 : AdditiveArithmetic, Comparable, SignedNumeric, Strideable,
     }
     
     public mutating func formSquareRoot() { x = Decimal32.sqrt(x, Decimal32.rounding, &Decimal32.state) }
+  
     public mutating func addProduct(_ lhs: Decimal32, _ rhs: Decimal32) {
         x = Decimal32.bid32_fma(lhs.x, rhs.x, self.x, Decimal32.rounding, &Decimal32.state)
     }

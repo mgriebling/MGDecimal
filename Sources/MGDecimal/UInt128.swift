@@ -113,7 +113,7 @@ public struct UInt128 : Equatable, Comparable, Codable, CustomStringConvertible,
     
     /// Equatable compliance
     public static func == (lhs: UInt128, rhs: UInt128) -> Bool { lhs.lo == rhs.lo && lhs.hi == rhs.hi }
-    public static func != (lhs: UInt128, rhs: UInt128) -> Bool { lhs.lo != rhs.lo || lhs.hi != rhs.hi }
+    public static func != (lhs: UInt128, rhs: UInt128) -> Bool { !(lhs == rhs) }
     
 }
 

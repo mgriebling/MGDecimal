@@ -84,17 +84,17 @@ public protocol DecimalFloatingPoint : ExpressibleByFloatLiteral, FloatingPoint 
     /// is reserved for subnormals and zeros, and an all-ones exponent is reserved
     /// for infinity and NaN.
     ///
-    /// For example, the `Decimal32` type has an `exponentMaximum` of `191` and
-    /// an exponent bias of `101`.  The unbiased `exponent` is given by
+    /// For example, the `Decimal128` type has an `exponentMaximum` of `12287` and
+    /// an exponent bias of `6176`.  The unbiased `exponent` is given by
     ///
     ///     exponent = exponentBitPattern - exponentBias + (significandMaxDigitCount-1)
     ///
-    ///     let bias = Decimal32.exponentBias
-    ///     // bias == 101
-    ///     print(Decimal32.greatestFiniteMagnitude.exponent)
-    ///     // Prints "96"
-    ///     print(Decimal32.leastNormalMagnitude.exponent)
-    ///     // Prints "-95"
+    ///     let bias = Decimal128.exponentBias
+    ///     // bias == 6176
+    ///     print(Decimal128.greatestFiniteMagnitude.exponent)
+    ///     // Prints "6145"
+    ///     print(Decimal128.leastNormalMagnitude.exponent)
+    ///     // Prints "-6142"
     static var exponentMaximum: Int { get }
     
     /// The exponent bias is an offset applied to the `exponent` when encoding

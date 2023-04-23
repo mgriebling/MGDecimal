@@ -657,7 +657,7 @@ extension Decimal32 {
             return get_BID32 (sign_x ^ sign_y, exponent_x, UInt32(P), rmode, &status)
         }
         
-        var rmode1 = roundboundIndex(rmode, (sign_x^sign_y) != 0, 0)
+        var rmode1 = roundboundIndex(rmode, (sign_x^sign_y) != 0, 0) >> 2
         if (sign_x ^ sign_y) != 0 && UInt32(rmode1 - 1) < 2 {
             rmode1 = 3 - rmode1
         }
@@ -1289,26 +1289,26 @@ extension Decimal32 {
                         exponent_x = MAX_EXPON
                     } else if exponent_x < 0 {
                         exponent_x = 0
-                        if exponent_x <= exponent_z {
-                            res = UInt32(exponent_x) << 23
-                        } else {
-                            res = UInt32(exponent_z) << 23
-                        }
-                        if (sign_x ^ sign_y) == sign_z {
-                            res |= sign_z
-                        } else if rmode == BID_ROUNDING_DOWN {
-                            res |= SIGN_MASK32
-                        }
-                        return res
                     }
-                    let d2 = exponent_x + exponent_y - EXPONENT_BIAS
-                    if exponent_z > d2 {
-                        exponent_z = d2
+                    if exponent_x <= exponent_z {
+                        res = UInt32(exponent_x) << 23
+                    } else {
+                        res = UInt32(exponent_z) << 23
                     }
+                    if (sign_x ^ sign_y) == sign_z {
+                        res |= sign_z
+                    } else if rmode == BID_ROUNDING_DOWN {
+                        res |= SIGN_MASK32
+                    }
+                    return res
+                }
+                let d2 = exponent_x + exponent_y - EXPONENT_BIAS
+                if exponent_z > d2 {
+                    exponent_z = d2
                 }
             }
         }
-        
+    
         let P0 = UInt64(coefficient_x) * UInt64(coefficient_y)
         exponent_x += exponent_y - EXPONENT_BIAS;
         
@@ -1336,7 +1336,7 @@ extension Decimal32 {
         var inexact = false
         if diff_dec_expon > 17 {
             let tempx = Double(coefficient_a)
-            let bin_expon = Int((tempx.bitPattern & Decimal64.MASK_BINARY_EXPONENT) >> 52) - BINARY_EXPONENT_BIAS
+            let bin_expon = tempx.exponent // Int((tempx.bitPattern & Decimal64.MASK_BINARY_EXPONENT) >> 52) - BINARY_EXPONENT_BIAS
             let scale_ca = Int(bid_estimate_decimal_digits[bin_expon])
             
             let d2 = 31 - scale_ca
@@ -1351,18 +1351,18 @@ extension Decimal32 {
         
         var sign_ab = Int64(sign_a ^ sign_b) << 32
         sign_ab = Int64(sign_ab) >> 63
-        var CB = UInt128()
-        CB.lo = UInt64((Int64(coefficient_b) + sign_ab) ^ sign_ab)
-        CB.hi = UInt64(Int64(CB.lo) >> 63)
+        let low = UInt64(bitPattern: (Int64(coefficient_b) + sign_ab) ^ sign_ab)
+        let high = Int64(bitPattern: low) >> 63
+        let CB = UInt128(upper: UInt64(bitPattern: high), lower: low)
         
         var Tmp = UInt128(), P = UInt128()
         __mul_64x128_low(&Tmp, coefficient_a, bid_power10_table_128[diff_dec_expon])
         __add_128_128(&P, Tmp, CB)
-        if Int64(P.hi) < 0 {
+        if Int64(bitPattern:P.hi) < 0 {
             sign_a ^= SIGN_MASK32
-            P.hi = 0 - P.hi
-            if P.lo != 0 { P.hi -= 1 }
-            P.lo = 0 - P.lo
+            P.hi = 0 &- P.hi
+            if P.lo != 0 { P.hi &-= 1 }
+            P.lo = 0 &- P.lo
         }
         
         var n_digits = 0
@@ -1396,7 +1396,7 @@ extension Decimal32 {
         
         let extra_digits = n_digits - 7
         
-        var rmode1 = roundboundIndex(rmode, sign_a != 0, 0) // rnd_mode;
+        var rmode1 = roundboundIndex(rmode, sign_a != 0, 0) >> 2 // rnd_mode;
         //            if (sign_a && (unsigned) (rmode - 1) < 2) {
         //                rmode = 3 - rmode;
         //            }
@@ -1498,7 +1498,7 @@ extension Decimal32 {
         let R = !status.isEmpty ? 1 : 0
         
         if (UInt32(C64) == MAX_NUMBER) && (exponent_b+extra_digits == -1) && (rmode != BID_ROUNDING_TO_ZERO) {
-            rmode1 = roundboundIndex(rmode, sign_a != 0, 0)
+            rmode1 = roundboundIndex(rmode, sign_a != 0, 0) >> 2
             //                if (sign_a && (unsigned) (rmode - 1) < 2) {
             //                    rmode = 3 - rmode;
             //                }
