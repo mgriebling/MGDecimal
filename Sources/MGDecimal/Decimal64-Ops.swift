@@ -1940,10 +1940,10 @@ extension Decimal64 {
         }
         
         if (round_flag != 0 && (rmode & 3 != 0)) {
-            let D = round_dir ^ sign_z
+            let D = Int64(bitPattern: round_dir ^ sign_z)
             
             if rounding_mode == BID_ROUNDING_UP {
-                if (D >= 0) {
+                if D >= 0 {
                     coefficient_z+=1
                 }
             } else {

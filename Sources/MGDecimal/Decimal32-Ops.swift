@@ -658,7 +658,7 @@ extension Decimal32 {
         }
         
         var rmode1 = roundboundIndex(rmode, (sign_x^sign_y) != 0, 0) >> 2
-        if (sign_x ^ sign_y) != 0 && UInt32(rmode1 - 1) < 2 {
+        if (sign_x ^ sign_y) != 0 && UInt32(bitPattern: Int32(rmode1 - 1)) < 2 {
             rmode1 = 3 - rmode1
         }
         
